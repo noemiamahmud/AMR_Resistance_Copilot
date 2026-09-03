@@ -12,7 +12,7 @@ database recognises, and explain the reasoning.
 
 ## Status
 
-Phase 2 complete — mutation → structure → measured distance to the drug → mechanism.
+Phase 3 complete — mutation → structure → mechanism → the beyond-the-catalogue flag.
 
 - Parses `rpoB S450L`, `rpoB p.Ser450Leu` and similar free text.
 - Renders RpoB with the mutated residue, the rifampicin-contact shell, and the drug itself.
@@ -20,7 +20,8 @@ Phase 2 complete — mutation → structure → measured distance to the drug �
   residue, and burial as a self-calibrating neighbour-count percentile.
 - Hands those measurements to a **local qwen3:8b** and gets back a schema-constrained
   mechanistic hypothesis: mechanism, resistance likelihood, caveat, what would confirm it.
-- Flags the mutation as known or novel against CARD.
+- States plainly what a catalogue lookup alone returns — and for anything CARD has not
+  already seen, that is nothing at all.
 
 Everything on this path runs from bundled local files and a model on the same machine —
 no network call is made at request time, and no API key exists to leak.
@@ -57,6 +58,36 @@ The pocket residue set is likewise measured, not curated: every rpoB residue wit
 canonical WHO rifampicin hotspot (L430, D435, H445, S450, L452, I491), with **S450 the
 single closest contact at 2.43 Å**. That agreement is a useful independent check that
 both the pocket derivation and the numbering below are right.
+
+## What a catalogue can and cannot say
+
+CARD holds 157 rpoB substitutions across 57 residues. Every one of them is a mutation
+somebody has already seen, phenotyped and written up. Ask it about anything else and it
+returns nothing — not "susceptible", not "unknown risk", nothing — and that is the state a
+surveillance analyst is left in every time sequencing turns up something new.
+
+So the tool answers the catalogue question explicitly, in a banner directly under the
+structural call: **what would a lookup alone have told you?** For a novel mutation it says
+so and keeps going, because the measurement and the mechanism never needed the catalogue.
+
+`rpoB S450P` is the case to try. Residue 450 is the single closest contact to rifampicin
+at 2.43 Å and CARD catalogues ten substitutions there — S450A, C, F, G, L, M, Q, V, W, Y.
+Not P. A lookup returns nothing; the structure returns 2.71 Å, drug-contacting, pLDDT 96.9,
+and the model calls it high likelihood. `rpoB N487D` is the same story on a contact residue
+the catalogue has never touched at all.
+
+The banner also names the catalogued resistance residues sitting within 8 Å in 3D. That is
+context for the analyst, not evidence — it is catalogue knowledge, so it is kept out of the
+payload the model reasons over, for the same reason the verdict itself is.
+
+### When the two disagree
+
+`rpoB E592D` is catalogued by CARD as resistance-associated and sits **21 Å** from the drug.
+The structural read is *low*, and it is the structural read that is wrong: distal,
+allosteric and compensatory resistance is invisible from the binding site. The tool says so
+in the panel rather than quietly reconciling the two. Where a catalogue has phenotypic
+evidence, the catalogue wins; the argument for this tool is only ever about the mutations a
+catalogue is silent on.
 
 ## How the model is kept honest
 
@@ -119,7 +150,10 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
   cannot see (allostery, holoenzyme context, fitness cost).
 - This is a surveillance triage and hypothesis aid, **not a diagnostic**.
 - CARD and the WHO catalogue are prior art. The point here is to generalise beyond
-  them, not to replace them.
+  them, not to replace them — and for a catalogued mutation their evidence outranks
+  anything measured here.
+- "Novel" means absent from the bundled CARD export, which is a snapshot. It does not
+  mean absent from the literature.
 
 ## Stack
 

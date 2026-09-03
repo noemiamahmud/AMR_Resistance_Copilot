@@ -8,7 +8,7 @@ import { MutationParseError, ParsedMutation, parseMutation } from "./mutation";
 import { Atom, ParsedStructure, parsePdb } from "./pdb";
 import {
   BurialAtResidue, ConfidenceAtResidue, DrugProximity, PocketResidueRef,
-  confidenceAt, drugProximity, makeBurialCalculator,
+  confidenceAt, drugProximity, makeBurialCalculator, neighborsWithin,
 } from "./structure";
 import { RPOB_RIFAMPICIN, TargetDefinition, clinicalToUniprot, findTarget } from "./targets";
 
@@ -37,6 +37,36 @@ interface CatalogueFile {
   aro: string;
   entryCount: number;
   entries: CatalogueEntry[];
+}
+
+/** A catalogued resistance residue sitting near the query residue in 3D. */
+export interface NearbyCatalogued {
+  clinicalResnum: number;
+  aa: string;
+  distanceAngstroms: number;
+  mutations: string[];
+}
+
+export interface CatalogueVerdict {
+  name: string;
+  aro: string;
+  /** How many substitutions the catalogue holds for this gene, over how many residues. */
+  entryCount: number;
+  residuesCovered: number;
+  known: boolean;
+  exactMatch: CatalogueEntry | null;
+  sameResidueEntries: CatalogueEntry[];
+  /**
+   * What a catalogue lookup on its own - today's standard practice - returns for this
+   * mutation. When `call` is "no call" there is nothing further a catalogue can say.
+   */
+  catalogueOnly: { call: "resistance-associated" | "no call"; verdict: string };
+  /**
+   * Catalogued resistance residues within NEIGHBOURHOOD_ANGSTROMS of this one. Context for
+   * the analyst, not evidence: this is catalogue knowledge and is deliberately kept out of
+   * the payload the model reasons over (see lib/reasoning.ts).
+   */
+  nearbyKnownResistance: NearbyCatalogued[];
 }
 
 export interface AnalysisResult {
@@ -75,13 +105,7 @@ export interface AnalysisResult {
     clinicalResnums: number[];
     uniprotResnums: number[];
   };
-  /** Phase 3 fills this in; Phase 1 already reports the raw lookup. */
-  catalogue: {
-    name: string;
-    known: boolean;
-    exactMatch: CatalogueEntry | null;
-    sameResidueEntries: CatalogueEntry[];
-  };
+  catalogue: CatalogueVerdict;
   headline: string;
   provenance: string[];
 }
@@ -118,6 +142,69 @@ async function loadAssets(target: TargetDefinition) {
     burial: makeBurialCalculator(structure),
   };
   return cache;
+}
+
+/** How far out to look for catalogued resistance residues around the query residue. */
+const NEIGHBOURHOOD_ANGSTROMS = 8;
+
+function formatCitation(citation: string): string {
+  return /^\d+$/.test(citation) ? `PMID ${citation}` : citation;
+}
+
+/**
+ * The whole point of the project sits in this function: what does a resistance catalogue,
+ * used the way it is used today, actually return for this mutation? For anything it has
+ * not already seen, the honest answer is nothing at all - and that is the gap the
+ * structural analysis fills.
+ */
+function catalogueVerdict(
+  file: CatalogueFile,
+  parsed: ParsedMutation,
+  structure: ParsedStructure,
+  uniprotResnum: number,
+  offset: number,
+): CatalogueVerdict {
+  const exactMatch = file.entries.find((e) => e.mutation === parsed.canonical) ?? null;
+  const sameResidueEntries = file.entries.filter(
+    (e) => e.clinicalResnum === parsed.clinicalResnum && e.mutation !== parsed.canonical,
+  );
+
+  const cataloguedResidues = new Set(file.entries.map((e) => e.clinicalResnum));
+  const nearbyKnownResistance = neighborsWithin(
+    structure, uniprotResnum, NEIGHBOURHOOD_ANGSTROMS, offset,
+  )
+    .filter((n) => cataloguedResidues.has(n.clinicalResnum))
+    .slice(0, 6)
+    .map((n) => ({
+      clinicalResnum: n.clinicalResnum,
+      aa: THREE_TO_ONE[n.resName] ?? "?",
+      distanceAngstroms: n.distanceAngstroms,
+      mutations: file.entries
+        .filter((e) => e.clinicalResnum === n.clinicalResnum)
+        .map((e) => e.mutation),
+    }));
+
+  return {
+    name: file.catalogue,
+    aro: file.aro,
+    entryCount: file.entryCount,
+    residuesCovered: cataloguedResidues.size,
+    known: exactMatch !== null,
+    exactMatch,
+    sameResidueEntries,
+    catalogueOnly: exactMatch
+      ? {
+          call: "resistance-associated",
+          verdict:
+            `${file.catalogue} lists ${exactMatch.mutation} as a ${exactMatch.variantType} ` +
+            `(${exactMatch.evidence}, ${formatCitation(exactMatch.citation)}).`,
+        }
+      : {
+          call: "no call",
+          verdict: `${file.catalogue} has no entry for ${parsed.canonical}. A catalogue lookup ends here.`,
+        },
+    nearbyKnownResistance,
+  };
 }
 
 function headlineFor(
@@ -166,10 +253,8 @@ export async function analyseMutation(input: string): Promise<AnalysisResult> {
   const burial = assets.burial(uniprotResnum);
   const substitution = describeSubstitution(parsed.wildType, parsed.mutant);
 
-  const exactMatch =
-    assets.catalogue.entries.find((e) => e.mutation === parsed.canonical) ?? null;
-  const sameResidueEntries = assets.catalogue.entries.filter(
-    (e) => e.clinicalResnum === parsed.clinicalResnum && e.mutation !== parsed.canonical,
+  const catalogue = catalogueVerdict(
+    assets.catalogue, parsed, assets.structure, uniprotResnum, target.clinicalToUniprotOffset,
   );
 
   return {
@@ -211,12 +296,7 @@ export async function analyseMutation(input: string): Promise<AnalysisResult> {
       clinicalResnums: assets.pocket.residues.map((r) => r.clinicalResnum),
       uniprotResnums: assets.pocket.residues.map((r) => r.uniprotResnum),
     },
-    catalogue: {
-      name: assets.catalogue.catalogue,
-      known: exactMatch !== null,
-      exactMatch,
-      sameResidueEntries,
-    },
+    catalogue,
     headline: headlineFor(parsed, prox, confidence, burial, target.drug),
     provenance: [
       `Structure: ${target.structureSource} (${target.uniprotAccession})`,

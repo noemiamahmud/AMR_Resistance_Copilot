@@ -3,11 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import StructureViewer, { ViewerFocus } from "@/components/StructureViewer";
-import type { AnalysisResult } from "@/lib/analysis";
+import type { AnalysisResult, CatalogueVerdict } from "@/lib/analysis";
 import type { MechanisticReasoning, ResistanceLikelihood } from "@/lib/reasoning";
 
 const HERO_MUTATION = "rpoB S450L";
-const EXAMPLES = ["rpoB S450L", "rpoB H445Y", "rpoB D435V", "rpoB I491F", "rpoB E592D"];
+/**
+ * Two of these are the point of the project. S450P sits on the single closest contact
+ * residue to rifampicin, and N487D on another contact residue - and CARD catalogues
+ * neither. A catalogue-only tool has nothing to say about either one.
+ */
+const EXAMPLES = [
+  "rpoB S450L",
+  "rpoB H445Y",
+  "rpoB I491F",
+  "rpoB S450P",
+  "rpoB N487D",
+  "rpoB E592D",
+];
 
 interface ModelHealth {
   available: boolean;
@@ -236,11 +248,15 @@ function ResultPanel({
         </p>
       )}
 
+      <CatalogueBanner catalogue={catalogue} residue={numbering.clinicalResnum} />
+
       <ReasoningPanel
         reasoning={reasoning}
         busy={reasoningBusy}
         error={reasoningError}
         health={health}
+        catalogue={catalogue}
+        drug={structure.drug}
       />
 
       <Card title="Measured from coordinates">
@@ -281,38 +297,6 @@ function ResultPanel({
         </p>
       </Card>
 
-      <Card title="Catalogue lookup">
-        {catalogue.known ? (
-          <div className="text-slate-300">
-            <p>
-              <span className="rounded bg-slate-700 px-1.5 py-0.5 text-xs font-medium text-slate-200">
-                KNOWN
-              </span>{" "}
-              in {catalogue.name}.
-            </p>
-            <p className="mt-1.5 text-xs text-slate-400">
-              {catalogue.exactMatch?.variantType} · evidence {catalogue.exactMatch?.evidence} · cited{" "}
-              {catalogue.exactMatch?.citation}
-            </p>
-          </div>
-        ) : (
-          <div className="text-slate-300">
-            <p>
-              <span className="rounded bg-fuchsia-800 px-1.5 py-0.5 text-xs font-medium text-fuchsia-100">
-                NOVEL
-              </span>{" "}
-              — not in {catalogue.name}.
-            </p>
-            {catalogue.sameResidueEntries.length > 0 && (
-              <p className="mt-1.5 text-xs text-slate-400">
-                The catalogue does list other substitutions at residue {numbering.clinicalResnum}:{" "}
-                {catalogue.sameResidueEntries.map((e) => e.mutation).join(", ")}.
-              </p>
-            )}
-          </div>
-        )}
-      </Card>
-
       <Card title="Numbering">
         <p className="text-xs leading-relaxed text-slate-400">{numbering.explanation}</p>
       </Card>
@@ -331,6 +315,79 @@ function ResultPanel({
   );
 }
 
+/**
+ * The beyond-the-catalogue beat, promoted to sit directly under the structural call.
+ * For a novel mutation this is the whole argument in one panel: the catalogue returns
+ * nothing, and the tool goes on to make a mechanistic call anyway.
+ */
+function CatalogueBanner({
+  catalogue,
+  residue,
+}: {
+  catalogue: CatalogueVerdict;
+  residue: number;
+}) {
+  const known = catalogue.known;
+  const sameResidue = catalogue.sameResidueEntries.map((e) => e.mutation);
+  const shown = sameResidue.slice(0, 8);
+  const nearby = catalogue.nearbyKnownResistance.slice(0, 4);
+
+  return (
+    <div
+      className={`rounded-xl border px-4 py-3 ${
+        known ? "border-slate-700 bg-slate-900/60" : "border-fuchsia-800 bg-fuchsia-950/30"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <span
+          className={`rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide ${
+            known ? "bg-slate-700 text-slate-200" : "bg-fuchsia-700 text-fuchsia-50"
+          }`}
+        >
+          {known ? `In ${catalogue.name.split(" ")[0]}` : "Not in the catalogue"}
+        </span>
+        <span className="font-mono text-[11px] text-slate-500">
+          {catalogue.entryCount} substitutions · {catalogue.residuesCovered} residues
+        </span>
+      </div>
+
+      <p className="mt-2 leading-relaxed text-slate-200">{catalogue.catalogueOnly.verdict}</p>
+
+      <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+        {known
+          ? "The catalogue already covers this one. The structural call above is an independent read of the same mutation — the same reasoning that has to stand alone when the catalogue is silent."
+          : "This is where a catalogue stops, and surveillance keeps producing mutations no catalogue has seen. Everything above and below is measured from the structure, so the call still gets made."}
+      </p>
+
+      {!known && sameResidue.length > 0 && (
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+          It does list {sameResidue.length} other substitution
+          {sameResidue.length === 1 ? "" : "s"} at residue {residue}:{" "}
+          <span className="font-mono text-slate-300">{shown.join(", ")}</span>
+          {sameResidue.length > shown.length ? `, and ${sameResidue.length - shown.length} more` : ""}
+          {" — but not this one."}
+        </p>
+      )}
+
+      {!known && nearby.length > 0 && (
+        <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+          Catalogued resistance residues within 8 Å of it:{" "}
+          <span className="font-mono text-slate-300">
+            {nearby.map((n) => `${n.aa}${n.clinicalResnum} ${n.distanceAngstroms} Å`).join(" · ")}
+          </span>
+          . Context only — this is catalogue knowledge, and it is kept out of what the model sees.
+        </p>
+      )}
+
+      {known && catalogue.exactMatch && (
+        <p className="mt-2 font-mono text-[11px] text-slate-500">
+          {catalogue.aro} · {catalogue.exactMatch.evidence} · {catalogue.exactMatch.variantType}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const LIKELIHOOD_STYLES: Record<ResistanceLikelihood, string> = {
   high: "border-red-700 bg-red-950/60 text-red-200",
   moderate: "border-amber-700 bg-amber-950/60 text-amber-200",
@@ -338,16 +395,41 @@ const LIKELIHOOD_STYLES: Record<ResistanceLikelihood, string> = {
   uncertain: "border-slate-600 bg-slate-800/60 text-slate-300",
 };
 
+/**
+ * The model never sees the catalogue, so the two can disagree - and when they do it is
+ * worth naming rather than quietly resolving. A catalogued mutation far from the drug is
+ * the honest failure mode of a structure-only method: distal, allosteric and compensatory
+ * resistance looks exactly like this from the binding site.
+ */
+function disagreementNote(
+  catalogue: CatalogueVerdict,
+  drug: AnalysisResult["structure"]["drug"],
+  likelihood: ResistanceLikelihood,
+): string | null {
+  if (!catalogue.known) return null;
+  if (likelihood !== "low" && likelihood !== "uncertain") return null;
+  return (
+    `${catalogue.name.split(" ")[0]} lists this substitution as resistance-associated, but it is ` +
+    `${drug.minDistanceToDrugAngstroms} Å from the drug, so the structural read is ${likelihood}. ` +
+    `Structure only sees the binding site: a distal, allosteric or compensatory mechanism looks ` +
+    `exactly like this. Where the catalogue has phenotypic evidence, the catalogue wins.`
+  );
+}
+
 function ReasoningPanel({
   reasoning,
   busy,
   error,
   health,
+  catalogue,
+  drug,
 }: {
   reasoning: MechanisticReasoning | null;
   busy: boolean;
   error: string | null;
   health: ModelHealth | null;
+  catalogue: CatalogueVerdict;
+  drug: AnalysisResult["structure"]["drug"];
 }) {
   const modelName = reasoning?.model ?? health?.model ?? "qwen3:8b";
 
@@ -386,6 +468,15 @@ function ReasoningPanel({
           <p className="leading-relaxed text-slate-200">{reasoning.reasoning.mechanismHypothesis}</p>
           <Field label="Caveat">{reasoning.reasoning.confidenceCaveat}</Field>
           <Field label="What would confirm it">{reasoning.reasoning.whatWouldConfirm}</Field>
+          {(() => {
+            const note = disagreementNote(catalogue, drug, reasoning.reasoning.resistanceLikelihood);
+            return note ? (
+              <p className="rounded-lg border border-amber-800 bg-amber-950/30 px-3 py-2 text-xs leading-relaxed text-amber-300">
+                <span className="font-medium uppercase tracking-wide">Disagreement · </span>
+                {note}
+              </p>
+            ) : null;
+          })()}
         </div>
       )}
 
