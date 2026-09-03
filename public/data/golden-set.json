@@ -1,0 +1,32 @@
+{
+  "purpose": "Phase 6 eval: does the structural score separate resistant from neutral rpoB/rifampicin mutations?",
+  "target": "rpoB",
+  "organism": "Mycobacterium tuberculosis H37Rv",
+  "drug": "rifampicin",
+  "numbering": "clinical / WHO - NP_215181.1",
+  "resistant": {
+    "labelSource": "CARD (ARO:3003283), WHO-graded evidence - real catalogued resistance determinants, all single substitutions, all measured drug-contacting (<5 A) in this build's structural pipeline.",
+    "entries": [
+      { "mutation": "S450L", "distanceToDrugAngstroms": 2.71, "evidence": "WHO-R", "citation": "PMID:35944069" },
+      { "mutation": "H445Y", "distanceToDrugAngstroms": 3.01, "evidence": "WHO-R", "citation": "PMID:30337678" },
+      { "mutation": "D435V", "distanceToDrugAngstroms": 3.25, "evidence": "WHO-R", "citation": "PMID:30337678" },
+      { "mutation": "L430P", "distanceToDrugAngstroms": 3.66, "evidence": "WHO-R", "citation": "PMID:35944069" },
+      { "mutation": "Q432P", "distanceToDrugAngstroms": 2.90, "evidence": "WHO-R", "citation": "PMID:35944069" }
+    ]
+  },
+  "neutral": {
+    "labelSource": "PROXY negatives, not literature-confirmed susceptible phenotypes. CARD catalogues resistance determinants only - it has no confirmed-benign list, so no real negatives could be pulled from it. These were instead selected by an explicit, checkable rule: never reported at that residue in CARD despite rpoB being one of the most globally surveilled genes in bacteriology; structurally distant from the measured rifampicin pocket (>30 A vs ~3 A for the resistant set); high model confidence (pLDDT > 89); and a conservative substitution (same amino-acid class) so a resistance effect is doubly unlikely. This is a fair check that the tool measures what it claims to measure. It is NOT proof of generalization to a hard case such as a distal allosteric resistance mutation, and the separation this set shows should be reported with that caveat.",
+    "entries": [
+      { "mutation": "S100T", "distanceToDrugAngstroms": 35.1, "substitutionClass": "polar -> polar" },
+      { "mutation": "E250D", "distanceToDrugAngstroms": 45.9, "substitutionClass": "negative -> negative" },
+      { "mutation": "V800I", "distanceToDrugAngstroms": 30.9, "substitutionClass": "hydrophobic -> hydrophobic" },
+      { "mutation": "G1000A", "distanceToDrugAngstroms": 34.2, "substitutionClass": "special -> hydrophobic" },
+      { "mutation": "I1100V", "distanceToDrugAngstroms": 33.5, "substitutionClass": "hydrophobic -> hydrophobic" }
+    ]
+  },
+  "generalizationProbe": {
+    "description": "Phase 6's other eval: hide a known-resistant mutation from the catalogue lookup ('pretend novel') and confirm the structural score still flags it, while a pure catalogue lookup would return nothing.",
+    "suggestedMutation": "S450L",
+    "rationale": "Textbook case, drug-contacting at 2.71 A - if the structural score can't catch this when the catalogue is blinded, it can't catch anything."
+  }
+}
