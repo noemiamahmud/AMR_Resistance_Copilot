@@ -1,12 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import StructureViewer, { ViewerFocus } from "@/components/StructureViewer";
 import type { AnalysisResult } from "@/lib/analysis";
+import type { MechanisticReasoning, ResistanceLikelihood } from "@/lib/reasoning";
 
 const HERO_MUTATION = "rpoB S450L";
 const EXAMPLES = ["rpoB S450L", "rpoB H445Y", "rpoB D435V", "rpoB I491F", "rpoB E592D"];
+
+interface ModelHealth {
+  available: boolean;
+  model: string;
+  modelPresent: boolean;
+  host: string;
+  message: string | null;
+}
 
 export default function Home() {
   const [input, setInput] = useState(HERO_MUTATION);
@@ -14,34 +23,84 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const analyse = useCallback(async (mutation: string) => {
-    setBusy(true);
-    setError(null);
+  const [reasoning, setReasoning] = useState<MechanisticReasoning | null>(null);
+  const [reasoningError, setReasoningError] = useState<string | null>(null);
+  const [reasoningBusy, setReasoningBusy] = useState(false);
+  const [health, setHealth] = useState<ModelHealth | null>(null);
+  const reasoningAbort = useRef<AbortController | null>(null);
+
+  /** Ask the local model for a mechanism, cancelling any question still in flight. */
+  const requestReasoning = useCallback(async (mutation: string) => {
+    reasoningAbort.current?.abort();
+    const controller = new AbortController();
+    reasoningAbort.current = controller;
+
+    setReasoning(null);
+    setReasoningError(null);
+    setReasoningBusy(true);
     try {
-      const res = await fetch("/api/analyze", {
+      const res = await fetch("/api/reason", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mutation }),
+        signal: controller.signal,
       });
       const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? "Analysis failed.");
-        setResult(null);
-      } else {
-        setResult(body as AnalysisResult);
-      }
-    } catch {
-      setError("Could not reach the analysis service.");
-      setResult(null);
+      if (!res.ok) setReasoningError(body.error ?? "The local model did not answer.");
+      else setReasoning(body.reasoning as MechanisticReasoning);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return; // superseded by a newer question
+      setReasoningError("Could not reach the reasoning service.");
     } finally {
-      setBusy(false);
+      if (reasoningAbort.current === controller) setReasoningBusy(false);
     }
   }, []);
+
+  const analyse = useCallback(
+    async (mutation: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mutation }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          setError(body.error ?? "Analysis failed.");
+          setResult(null);
+          reasoningAbort.current?.abort();
+          setReasoning(null);
+          setReasoningError(null);
+          setReasoningBusy(false);
+        } else {
+          setResult(body as AnalysisResult);
+          // The structure renders immediately; the model reasons over it in the background.
+          void requestReasoning(mutation);
+        }
+      } catch {
+        setError("Could not reach the analysis service.");
+        setResult(null);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [requestReasoning],
+  );
 
   // The safety net: the hero case is analysed on load, entirely from local files.
   useEffect(() => {
     void analyse(HERO_MUTATION);
   }, [analyse]);
+
+  // Cold-loading an 8B model costs ~10s, so pay it before anyone is watching.
+  useEffect(() => {
+    fetch("/api/reason?prewarm=1")
+      .then((r) => r.json())
+      .then((h: ModelHealth) => setHealth(h))
+      .catch(() => setHealth(null));
+  }, []);
 
   const focus: ViewerFocus | null = result
     ? {
@@ -126,7 +185,15 @@ export default function Home() {
           </p>
         )}
 
-        {result && <ResultPanel result={result} />}
+        {result && (
+          <ResultPanel
+            result={result}
+            reasoning={reasoning}
+            reasoningBusy={reasoningBusy}
+            reasoningError={reasoningError}
+            health={health}
+          />
+        )}
       </section>
 
       <section className="min-h-[520px] lg:h-[calc(100vh-3rem)] lg:sticky lg:top-6">
@@ -136,7 +203,19 @@ export default function Home() {
   );
 }
 
-function ResultPanel({ result }: { result: AnalysisResult }) {
+function ResultPanel({
+  result,
+  reasoning,
+  reasoningBusy,
+  reasoningError,
+  health,
+}: {
+  result: AnalysisResult;
+  reasoning: MechanisticReasoning | null;
+  reasoningBusy: boolean;
+  reasoningError: string | null;
+  health: ModelHealth | null;
+}) {
   const { structure, numbering, catalogue, substitution } = result;
   const contact = structure.drug.proximity === "drug-contacting";
 
@@ -156,6 +235,13 @@ function ResultPanel({ result }: { result: AnalysisResult }) {
           {result.validation.message}
         </p>
       )}
+
+      <ReasoningPanel
+        reasoning={reasoning}
+        busy={reasoningBusy}
+        error={reasoningError}
+        health={health}
+      />
 
       <Card title="Measured from coordinates">
         <Metric
@@ -241,6 +327,117 @@ function ResultPanel({ result }: { result: AnalysisResult }) {
           ))}
         </ul>
       </details>
+    </div>
+  );
+}
+
+const LIKELIHOOD_STYLES: Record<ResistanceLikelihood, string> = {
+  high: "border-red-700 bg-red-950/60 text-red-200",
+  moderate: "border-amber-700 bg-amber-950/60 text-amber-200",
+  low: "border-emerald-800 bg-emerald-950/60 text-emerald-200",
+  uncertain: "border-slate-600 bg-slate-800/60 text-slate-300",
+};
+
+function ReasoningPanel({
+  reasoning,
+  busy,
+  error,
+  health,
+}: {
+  reasoning: MechanisticReasoning | null;
+  busy: boolean;
+  error: string | null;
+  health: ModelHealth | null;
+}) {
+  const modelName = reasoning?.model ?? health?.model ?? "qwen3:8b";
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-xs uppercase tracking-wide text-slate-400">Mechanistic hypothesis</p>
+        <p className="font-mono text-[11px] text-slate-500">
+          {modelName} · local
+          {reasoning ? ` · ${(reasoning.latencyMs / 1000).toFixed(1)}s` : ""}
+        </p>
+      </div>
+
+      {busy && <Thinking />}
+
+      {!busy && error && (
+        <div className="mt-2 rounded-lg border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-300">
+          {error}
+          <span className="mt-1 block text-amber-400/70">
+            The measurements above are computed locally and stand without the model.
+          </span>
+        </div>
+      )}
+
+      {!busy && !error && reasoning?.reasoning && (
+        <div className="mt-2.5 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span
+              className={`rounded border px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${
+                LIKELIHOOD_STYLES[reasoning.reasoning.resistanceLikelihood]
+              }`}
+            >
+              {reasoning.reasoning.resistanceLikelihood} resistance likelihood
+            </span>
+          </div>
+          <p className="leading-relaxed text-slate-200">{reasoning.reasoning.mechanismHypothesis}</p>
+          <Field label="Caveat">{reasoning.reasoning.confidenceCaveat}</Field>
+          <Field label="What would confirm it">{reasoning.reasoning.whatWouldConfirm}</Field>
+        </div>
+      )}
+
+      {!busy && !error && reasoning?.text && (
+        <p className="mt-2.5 whitespace-pre-wrap leading-relaxed text-slate-200">{reasoning.text}</p>
+      )}
+
+      {!busy && !error && reasoning && (
+        <details className="mt-3 border-t border-slate-800 pt-2">
+          <summary className="cursor-pointer text-xs text-slate-500">
+            Evidence handed to the model
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">
+            The model sees only these measurements. The catalogue verdict is deliberately withheld,
+            so its answer cannot be a memory of a famous mutation.
+          </p>
+          <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-2.5 font-mono text-[11px] leading-relaxed text-slate-400">
+            {JSON.stringify(reasoning.features, null, 2)}
+          </pre>
+          {reasoning.notes.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-amber-400/80">
+              {reasoning.notes.map((n) => (
+                <li key={n}>· {n}</li>
+              ))}
+            </ul>
+          )}
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** An 8B model on a laptop takes ~10s; show the clock rather than a mute spinner. */
+function Thinking() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <p className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
+      Reasoning over the measurements… {seconds}s
+    </p>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-0.5 leading-relaxed text-slate-300">{children}</p>
     </div>
   );
 }
