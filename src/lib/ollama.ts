@@ -28,14 +28,39 @@ export function ollamaModel(): string {
 /** The local model is unreachable, or took too long. Callers degrade rather than fail. */
 export class OllamaUnavailableError extends Error {}
 
+export interface ToolCall {
+  function: { name: string; arguments: Record<string, unknown> };
+}
+
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** On an assistant turn: the calls the model asked for, echoed back into history. */
+  tool_calls?: ToolCall[];
+  /** On a tool turn: which tool produced this content. */
+  tool_name?: string;
+}
+
+/** Ollama takes the OpenAI function-tool shape. */
+export interface ToolSpec {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: "object";
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+  };
 }
 
 export interface ChatOptions {
   /** JSON schema; when given, Ollama constrains decoding to it. */
   schema?: unknown;
+  /** Tools the model may call. Not combinable with `schema`: constrained decoding to an
+   *  object schema leaves no room for the model to emit a tool call instead. */
+  tools?: ToolSpec[];
   /** qwen3 thinks by default; off unless a caller really wants it. */
   think?: boolean;
   temperature?: number;
@@ -47,6 +72,7 @@ export interface ChatOptions {
 
 export interface ChatResult {
   content: string;
+  toolCalls: ToolCall[];
   model: string;
   latencyMs: number;
   /** Ollama reports how much of the wall clock went into loading the model. */
@@ -56,7 +82,7 @@ export interface ChatResult {
 
 interface OllamaChatResponse {
   model?: string;
-  message?: { content?: string };
+  message?: { content?: string; tool_calls?: ToolCall[] };
   total_duration?: number;
   load_duration?: number;
   eval_count?: number;
@@ -66,7 +92,9 @@ interface OllamaChatResponse {
 const NANOS_PER_MS = 1e6;
 
 export async function chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<ChatResult> {
-  const { schema, think = false, temperature = 0.2, maxTokens = 700, timeoutMs = 120_000 } = options;
+  const {
+    schema, tools, think = false, temperature = 0.2, maxTokens = 700, timeoutMs = 120_000,
+  } = options;
 
   const model = ollamaModel();
   const signals = [AbortSignal.timeout(timeoutMs)];
@@ -85,6 +113,7 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
         stream: false,
         think,
         ...(schema ? { format: schema } : {}),
+        ...(tools?.length ? { tools } : {}),
         options: { temperature, num_predict: maxTokens },
       }),
     });
@@ -110,6 +139,7 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
 
   return {
     content: body.message?.content ?? "",
+    toolCalls: body.message?.tool_calls ?? [],
     model: body.model ?? model,
     latencyMs: Date.now() - started,
     loadMs: Math.round((body.load_duration ?? 0) / NANOS_PER_MS),

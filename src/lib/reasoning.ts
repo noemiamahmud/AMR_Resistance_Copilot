@@ -74,7 +74,8 @@ export interface MechanisticReasoning {
 
 export { OllamaUnavailableError };
 
-const SYSTEM_PROMPT = [
+/** The rules that apply wherever the model is asked for a mechanism - pipeline or agent. */
+export const MECHANISM_RULES = [
   "You are a structural-biology assistant supporting a genomic antimicrobial-resistance",
   "surveillance analyst. You are given measurements taken from a 3D protein structure for a",
   "single mutation in a drug-target protein, and you propose a mechanistic hypothesis for",
@@ -94,7 +95,9 @@ const SYSTEM_PROMPT = [
   "- This is a triage hypothesis, not a diagnosis.",
 ].join("\n");
 
-const RESPONSE_SCHEMA = {
+const SYSTEM_PROMPT = MECHANISM_RULES;
+
+export const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     // Order matters: Ollama's constrained decoder emits properties in this order, so the
@@ -226,6 +229,16 @@ function coerce(value: unknown): { reasoning: StructuredReasoning | null; notes:
   };
 }
 
+/** Salvage a StructuredReasoning out of whatever the model returned. */
+export function parseStructuredReasoning(raw: string): {
+  reasoning: StructuredReasoning | null;
+  notes: string[];
+} {
+  const parsed = extractJson(raw);
+  if (parsed === null) return { reasoning: null, notes: ["model output was not parseable JSON"] };
+  return coerce(parsed);
+}
+
 export interface ReasonOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -254,10 +267,7 @@ export async function reasonAboutMutation(
     timeoutMs: options.timeoutMs,
   });
 
-  const parsed = extractJson(result.content);
-  const { reasoning, notes } = parsed === null
-    ? { reasoning: null, notes: ["model output was not parseable JSON"] }
-    : coerce(parsed);
+  const { reasoning, notes } = parseStructuredReasoning(result.content);
 
   if (reasoning) {
     return {

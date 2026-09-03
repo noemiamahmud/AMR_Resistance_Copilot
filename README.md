@@ -12,7 +12,7 @@ database recognises, and explain the reasoning.
 
 ## Status
 
-Phase 3 complete — mutation → structure → mechanism → the beyond-the-catalogue flag.
+Phase 4 complete — mutation → structure → mechanism → catalogue flag → agent + tool trace.
 
 - Parses `rpoB S450L`, `rpoB p.Ser450Leu` and similar free text.
 - Renders RpoB with the mutated residue, the rifampicin-contact shell, and the drug itself.
@@ -22,6 +22,9 @@ Phase 3 complete — mutation → structure → mechanism → the beyond-the-cat
   mechanistic hypothesis: mechanism, resistance likelihood, caveat, what would confirm it.
 - States plainly what a catalogue lookup alone returns — and for anything CARD has not
   already seen, that is nothing at all.
+- Runs the same question a second way: an **agent** given the mutation string and no
+  measurements, which has to call structural tools to obtain every number it uses, with
+  the full call trace rendered under the answer.
 
 Everything on this path runs from bundled local files and a model on the same machine —
 no network call is made at request time, and no API key exists to leak.
@@ -38,6 +41,9 @@ npm run dev                  # http://localhost:3000
 
 The hero case (`rpoB S450L`) is analysed automatically on load, and the page pre-warms
 the model in the background so the first hypothesis is not paying a cold weight load.
+
+Reasoning runs in one of two modes, switched in the UI: the fast **pipeline** or the
+**agent**, which measures the structure itself and shows its tool trace.
 
 `OLLAMA_HOST` (default `http://localhost:11434`) and `OLLAMA_MODEL` (default `qwen3:8b`)
 override the defaults. With no model reachable the structural analysis still runs in
@@ -113,6 +119,52 @@ unusable anyway, the call is retried without the schema and the prose is rendere
 Ranking it against the golden set is Phase 6's job; what Phase 2 shows is that the model's
 verdict tracks the geometry — `S450L` at 2.71 Å reads *high*, `E592D` at 21 Å reads *low*.
 
+## Two ways of asking the same question
+
+The **pipeline** computes the features, hands the model a finished payload, and gets an
+answer back in one call (~10–15 s). It is deterministic up to the model, and it is the
+default.
+
+The **agent** starts the model with a mutation string and nothing else. Every number it
+uses has to come back from a tool call:
+
+| Tool | Returns |
+|---|---|
+| `distance_to_drug(residue)` | minimum heavy-atom and Cα distance to rifampicin, proximity band, whether the residue is an observed contact |
+| `plddt_at(residue)` | AlphaFold confidence at the residue |
+| `burial_at(residue)` | neighbour count within 10 Å, as a percentile of this structure |
+| `neighbors_within(residue, radius)` | what the side chain is actually packed against |
+| `catalogue_lookup(mutation)` | the CARD entry, or an explicit "no entry" |
+
+These are thin wrappers over the functions the pipeline already calls, against the same
+bundled structure, so the two paths cannot quietly drift apart. Every tool takes and
+returns **clinical** numbering and converts internally — the +6 offset below is exactly the
+kind of thing that must not be left to a model.
+
+A typical run on `rpoB S450P` takes five turns and about a minute:
+
+```
+1. catalogue_lookup {"mutation":"rpoB S450P"}  → known: false, "A catalogue lookup ends here"
+2. distance_to_drug {"residue":450}            → 2.71 Å, drug-contacting
+3. plddt_at         {"residue":450}            → 96.9, very high
+4. burial_at        {"residue":450}            → 68th percentile, buried
+5. neighbors_within {"residue":450,"radius":6} → 16 residues, nearest L449 at 1.33 Å
+```
+
+The model picked that sequence itself, and the answer cites those numbers. What makes the
+trace worth showing is that it is **complete**: a claim about a distance nobody measured is
+not merely discouraged, it is unavailable. If the model tries to answer before measuring
+anything, it is asked again and the panel records that it did.
+
+Tool turns and the answer turn are separate calls. Constrained decoding to the answer
+schema leaves no room to emit a tool call instead, so the loop runs unconstrained with
+tools and only the final turn is schema-bound.
+
+One deliberate asymmetry: the agent **may** consult the catalogue, and the pipeline may
+not. Seeing `catalogue_lookup` come back empty and the model keep going is the argument
+made in one screen. But it does mean the agent path is not catalogue-blind, so the
+Phase 6 eval will score the pipeline, which is.
+
 ## The numbering trap
 
 CARD and the WHO catalogue number rpoB against **NP_215181.1 (1172 aa)**. UniProt
@@ -145,6 +197,8 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
 - Pocket distance is a geometric measurement against a transplanted crystallographic
   ligand pose. It is **not** docking or a computed binding affinity.
 - The structure is an AlphaFold monomer; the real target is a multi-subunit holoenzyme.
+- The agent costs five or six model round trips, about a minute on an M2. It is the
+  transparency story, not the fast path.
 - The mechanism text is generated by an 8B model from the measurements above. It is a
   hypothesis to check, not a validated prediction, and it inherits whatever the geometry
   cannot see (allostery, holoenzyme context, fitness cost).

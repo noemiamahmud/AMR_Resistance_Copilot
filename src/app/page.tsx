@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import StructureViewer, { ViewerFocus } from "@/components/StructureViewer";
+import type { AgentRun, ToolCallRecord } from "@/lib/agent";
 import type { AnalysisResult, CatalogueVerdict } from "@/lib/analysis";
 import type { MechanisticReasoning, ResistanceLikelihood } from "@/lib/reasoning";
+
+/**
+ * Two ways of asking the same question. The pipeline hands the model a finished feature
+ * payload; the agent hands it a mutation string and makes it measure the structure itself,
+ * one tool call at a time, and shows the trace. The pipeline is the fast, deterministic
+ * path and stays the default - the agent costs five or six model round trips.
+ */
+type Mode = "pipeline" | "agent";
 
 const HERO_MUTATION = "rpoB S450L";
 /**
@@ -35,23 +44,27 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [mode, setMode] = useState<Mode>("pipeline");
   const [reasoning, setReasoning] = useState<MechanisticReasoning | null>(null);
+  const [agent, setAgent] = useState<AgentRun | null>(null);
   const [reasoningError, setReasoningError] = useState<string | null>(null);
   const [reasoningBusy, setReasoningBusy] = useState(false);
+  const [lastQuery, setLastQuery] = useState(HERO_MUTATION);
   const [health, setHealth] = useState<ModelHealth | null>(null);
   const reasoningAbort = useRef<AbortController | null>(null);
 
   /** Ask the local model for a mechanism, cancelling any question still in flight. */
-  const requestReasoning = useCallback(async (mutation: string) => {
+  const requestReasoning = useCallback(async (mutation: string, nextMode: Mode) => {
     reasoningAbort.current?.abort();
     const controller = new AbortController();
     reasoningAbort.current = controller;
 
     setReasoning(null);
+    setAgent(null);
     setReasoningError(null);
     setReasoningBusy(true);
     try {
-      const res = await fetch("/api/reason", {
+      const res = await fetch(nextMode === "agent" ? "/api/agent" : "/api/reason", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mutation }),
@@ -59,6 +72,7 @@ export default function Home() {
       });
       const body = await res.json();
       if (!res.ok) setReasoningError(body.error ?? "The local model did not answer.");
+      else if (nextMode === "agent") setAgent(body as AgentRun);
       else setReasoning(body.reasoning as MechanisticReasoning);
     } catch (err) {
       if ((err as Error).name === "AbortError") return; // superseded by a newer question
@@ -69,9 +83,10 @@ export default function Home() {
   }, []);
 
   const analyse = useCallback(
-    async (mutation: string) => {
+    async (mutation: string, nextMode: Mode = mode) => {
       setBusy(true);
       setError(null);
+      setLastQuery(mutation);
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
@@ -84,12 +99,13 @@ export default function Home() {
           setResult(null);
           reasoningAbort.current?.abort();
           setReasoning(null);
+          setAgent(null);
           setReasoningError(null);
           setReasoningBusy(false);
         } else {
           setResult(body as AnalysisResult);
           // The structure renders immediately; the model reasons over it in the background.
-          void requestReasoning(mutation);
+          void requestReasoning(mutation, nextMode);
         }
       } catch {
         setError("Could not reach the analysis service.");
@@ -98,13 +114,15 @@ export default function Home() {
         setBusy(false);
       }
     },
-    [requestReasoning],
+    [mode, requestReasoning],
   );
 
   // The safety net: the hero case is analysed on load, entirely from local files.
   useEffect(() => {
-    void analyse(HERO_MUTATION);
-  }, [analyse]);
+    void analyse(HERO_MUTATION, "pipeline");
+    // Load-time only; switching mode later re-runs through switchMode, not through here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cold-loading an 8B model costs ~10s, so pay it before anyone is watching.
   useEffect(() => {
@@ -113,6 +131,13 @@ export default function Home() {
       .then((h: ModelHealth) => setHealth(h))
       .catch(() => setHealth(null));
   }, []);
+
+  /** Switching how the question is asked re-asks it; the structure below is unchanged. */
+  const switchMode = (next: Mode) => {
+    if (next === mode) return;
+    setMode(next);
+    if (result) void requestReasoning(lastQuery, next);
+  };
 
   const focus: ViewerFocus | null = result
     ? {
@@ -191,6 +216,23 @@ export default function Home() {
           </div>
         </form>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs uppercase tracking-wide text-slate-500">Reasoning</span>
+          <div className="flex overflow-hidden rounded-lg border border-slate-700">
+            <ModeButton active={mode === "pipeline"} onClick={() => switchMode("pipeline")}>
+              Pipeline
+            </ModeButton>
+            <ModeButton active={mode === "agent"} onClick={() => switchMode("agent")}>
+              Agent + tool trace
+            </ModeButton>
+          </div>
+          <span className="text-xs text-slate-500">
+            {mode === "pipeline"
+              ? "one call over precomputed features"
+              : "the model measures the structure itself · ~1 min"}
+          </span>
+        </div>
+
         {error && (
           <p className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300">
             {error}
@@ -200,7 +242,9 @@ export default function Home() {
         {result && (
           <ResultPanel
             result={result}
+            mode={mode}
             reasoning={reasoning}
+            agent={agent}
             reasoningBusy={reasoningBusy}
             reasoningError={reasoningError}
             health={health}
@@ -217,13 +261,17 @@ export default function Home() {
 
 function ResultPanel({
   result,
+  mode,
   reasoning,
+  agent,
   reasoningBusy,
   reasoningError,
   health,
 }: {
   result: AnalysisResult;
+  mode: Mode;
   reasoning: MechanisticReasoning | null;
+  agent: AgentRun | null;
   reasoningBusy: boolean;
   reasoningError: string | null;
   health: ModelHealth | null;
@@ -251,7 +299,9 @@ function ResultPanel({
       <CatalogueBanner catalogue={catalogue} residue={numbering.clinicalResnum} />
 
       <ReasoningPanel
+        mode={mode}
         reasoning={reasoning}
+        agent={agent}
         busy={reasoningBusy}
         error={reasoningError}
         health={health}
@@ -417,33 +467,45 @@ function disagreementNote(
 }
 
 function ReasoningPanel({
+  mode,
   reasoning,
+  agent,
   busy,
   error,
   health,
   catalogue,
   drug,
 }: {
+  mode: Mode;
   reasoning: MechanisticReasoning | null;
+  agent: AgentRun | null;
   busy: boolean;
   error: string | null;
   health: ModelHealth | null;
   catalogue: CatalogueVerdict;
   drug: AnalysisResult["structure"]["drug"];
 }) {
-  const modelName = reasoning?.model ?? health?.model ?? "qwen3:8b";
+  // Both modes answer in the same shape, so the panel below them is the same panel.
+  const answer = mode === "agent" ? agent?.reasoning ?? null : reasoning?.reasoning ?? null;
+  const prose = mode === "agent" ? agent?.text ?? null : reasoning?.text ?? null;
+  const run = mode === "agent" ? agent : reasoning;
+  const notes = run?.notes ?? [];
+  const modelName = run?.model ?? health?.model ?? "qwen3:8b";
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs uppercase tracking-wide text-slate-400">Mechanistic hypothesis</p>
+        <p className="text-xs uppercase tracking-wide text-slate-400">
+          Mechanistic hypothesis{mode === "agent" ? " · agent" : ""}
+        </p>
         <p className="font-mono text-[11px] text-slate-500">
           {modelName} · local
-          {reasoning ? ` · ${(reasoning.latencyMs / 1000).toFixed(1)}s` : ""}
+          {run ? ` · ${(run.latencyMs / 1000).toFixed(1)}s` : ""}
+          {agent && mode === "agent" ? ` · ${agent.trace.length} tool calls` : ""}
         </p>
       </div>
 
-      {busy && <Thinking />}
+      {busy && <Thinking mode={mode} />}
 
       {!busy && error && (
         <div className="mt-2 rounded-lg border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-300">
@@ -454,22 +516,22 @@ function ReasoningPanel({
         </div>
       )}
 
-      {!busy && !error && reasoning?.reasoning && (
+      {!busy && !error && answer && (
         <div className="mt-2.5 flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span
               className={`rounded border px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${
-                LIKELIHOOD_STYLES[reasoning.reasoning.resistanceLikelihood]
+                LIKELIHOOD_STYLES[answer.resistanceLikelihood]
               }`}
             >
-              {reasoning.reasoning.resistanceLikelihood} resistance likelihood
+              {answer.resistanceLikelihood} resistance likelihood
             </span>
           </div>
-          <p className="leading-relaxed text-slate-200">{reasoning.reasoning.mechanismHypothesis}</p>
-          <Field label="Caveat">{reasoning.reasoning.confidenceCaveat}</Field>
-          <Field label="What would confirm it">{reasoning.reasoning.whatWouldConfirm}</Field>
+          <p className="leading-relaxed text-slate-200">{answer.mechanismHypothesis}</p>
+          <Field label="Caveat">{answer.confidenceCaveat}</Field>
+          <Field label="What would confirm it">{answer.whatWouldConfirm}</Field>
           {(() => {
-            const note = disagreementNote(catalogue, drug, reasoning.reasoning.resistanceLikelihood);
+            const note = disagreementNote(catalogue, drug, answer.resistanceLikelihood);
             return note ? (
               <p className="rounded-lg border border-amber-800 bg-amber-950/30 px-3 py-2 text-xs leading-relaxed text-amber-300">
                 <span className="font-medium uppercase tracking-wide">Disagreement · </span>
@@ -480,11 +542,13 @@ function ReasoningPanel({
         </div>
       )}
 
-      {!busy && !error && reasoning?.text && (
-        <p className="mt-2.5 whitespace-pre-wrap leading-relaxed text-slate-200">{reasoning.text}</p>
+      {!busy && !error && prose && (
+        <p className="mt-2.5 whitespace-pre-wrap leading-relaxed text-slate-200">{prose}</p>
       )}
 
-      {!busy && !error && reasoning && (
+      {!busy && !error && mode === "agent" && agent && <ToolTrace agent={agent} />}
+
+      {!busy && !error && mode === "pipeline" && reasoning && (
         <details className="mt-3 border-t border-slate-800 pt-2">
           <summary className="cursor-pointer text-xs text-slate-500">
             Evidence handed to the model
@@ -496,21 +560,88 @@ function ReasoningPanel({
           <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-2.5 font-mono text-[11px] leading-relaxed text-slate-400">
             {JSON.stringify(reasoning.features, null, 2)}
           </pre>
-          {reasoning.notes.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-amber-400/80">
-              {reasoning.notes.map((n) => (
-                <li key={n}>· {n}</li>
-              ))}
-            </ul>
-          )}
         </details>
+      )}
+
+      {!busy && !error && notes.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-amber-400/80">
+          {notes.map((n) => (
+            <li key={n}>· {n}</li>
+          ))}
+        </ul>
       )}
     </div>
   );
 }
 
-/** An 8B model on a laptop takes ~10s; show the clock rather than a mute spinner. */
-function Thinking() {
+/**
+ * The trace is the point of the agent mode. The model started with a mutation string and
+ * no measurements, so every number in the answer above arrived through one of these calls,
+ * and anything it could not measure it could not claim.
+ */
+function ToolTrace({ agent }: { agent: AgentRun }) {
+  return (
+    <details open className="mt-3 border-t border-slate-800 pt-2">
+      <summary className="cursor-pointer text-xs text-slate-500">
+        Tool trace — {agent.trace.length} call{agent.trace.length === 1 ? "" : "s"} over{" "}
+        {agent.turns} turn{agent.turns === 1 ? "" : "s"}
+      </summary>
+      <p className="mt-2 text-xs leading-relaxed text-slate-500">
+        The model was given the mutation and nothing else. It chose this sequence itself, out
+        of{" "}
+        <span className="font-mono text-slate-400">{agent.toolsOffered.join(", ")}</span>.
+      </p>
+      <ol className="mt-2 flex flex-col gap-1.5">
+        {agent.trace.map((call) => (
+          <TraceRow key={call.step} call={call} />
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+function TraceRow({ call }: { call: ToolCallRecord }) {
+  return (
+    <li className="rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-1.5">
+      <div className="flex items-baseline gap-2 font-mono text-[11px]">
+        <span className="text-slate-600">{call.step}</span>
+        <span className={call.ok ? "text-teal-300" : "text-amber-300"}>{call.name}</span>
+        <span className="min-w-0 flex-1 truncate text-slate-500">
+          {JSON.stringify(call.arguments)}
+        </span>
+        <span className="text-slate-600">{call.durationMs}ms</span>
+      </div>
+      <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-slate-400">
+        {JSON.stringify(call.result)}
+      </pre>
+    </li>
+  );
+}
+
+function ModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2.5 py-1 text-xs transition ${
+        active ? "bg-teal-500 text-slate-950" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** An 8B model on a laptop takes ~10s, and a tool loop six times that; show the clock. */
+function Thinking({ mode }: { mode: Mode }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -519,7 +650,10 @@ function Thinking() {
   return (
     <p className="mt-2 flex items-center gap-2 text-xs text-slate-400">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-      Reasoning over the measurements… {seconds}s
+      {mode === "agent"
+        ? "Measuring the structure, one tool call at a time…"
+        : "Reasoning over the measurements…"}{" "}
+      {seconds}s
     </p>
   );
 }

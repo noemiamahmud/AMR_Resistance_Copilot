@@ -118,7 +118,8 @@ let cache: {
   burial: (resSeq: number) => BurialAtResidue;
 } | null = null;
 
-async function loadAssets(target: TargetDefinition) {
+/** Exposed so the Phase 4 toolbox measures the same structure the pipeline does. */
+export async function loadAssets(target: TargetDefinition) {
   if (cache) return cache;
   const dir = path.join(process.cwd(), "public");
   const [pdbText, ligandText, pocketRaw, catalogueRaw] = await Promise.all([
@@ -145,7 +146,7 @@ async function loadAssets(target: TargetDefinition) {
 }
 
 /** How far out to look for catalogued resistance residues around the query residue. */
-const NEIGHBOURHOOD_ANGSTROMS = 8;
+export const NEIGHBOURHOOD_ANGSTROMS = 8;
 
 function formatCitation(citation: string): string {
   return /^\d+$/.test(citation) ? `PMID ${citation}` : citation;
