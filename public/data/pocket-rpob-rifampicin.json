@@ -1,0 +1,153 @@
+{
+  "target": "rpoB",
+  "organism": "Mycobacterium tuberculosis H37Rv",
+  "drug": "rifampicin",
+  "source": {
+    "pdbId": "5UHC",
+    "description": "M. tuberculosis transcription initiation complex with rifampicin",
+    "ligandCode": "RFP",
+    "rpoBAuthChain": "C",
+    "contactCutoffAngstroms": 5.0,
+    "method": "minimum heavy-atom distance from each rpoB residue to any rifampicin atom"
+  },
+  "numbering": {
+    "clinicalReference": "NP_215181.1 (1172 aa) - CARD / WHO catalogue numbering",
+    "uniprotReference": "P9WGY9 (1178 aa) - AlphaFold AF-P9WGY9-F1 numbering",
+    "clinicalPlusOffsetEqualsUniprot": 6
+  },
+  "residueCount": 22,
+  "residues": [
+    {
+      "uniprotResnum": 173,
+      "clinicalResnum": 167,
+      "aa": "R",
+      "minDistanceToRifampicin": 4.23
+    },
+    {
+      "uniprotResnum": 176,
+      "clinicalResnum": 170,
+      "aa": "V",
+      "minDistanceToRifampicin": 4.11
+    },
+    {
+      "uniprotResnum": 434,
+      "clinicalResnum": 428,
+      "aa": "S",
+      "minDistanceToRifampicin": 3.98
+    },
+    {
+      "uniprotResnum": 435,
+      "clinicalResnum": 429,
+      "aa": "Q",
+      "minDistanceToRifampicin": 3.22
+    },
+    {
+      "uniprotResnum": 436,
+      "clinicalResnum": 430,
+      "aa": "L",
+      "minDistanceToRifampicin": 3.67
+    },
+    {
+      "uniprotResnum": 437,
+      "clinicalResnum": 431,
+      "aa": "S",
+      "minDistanceToRifampicin": 3.97
+    },
+    {
+      "uniprotResnum": 438,
+      "clinicalResnum": 432,
+      "aa": "Q",
+      "minDistanceToRifampicin": 3.07
+    },
+    {
+      "uniprotResnum": 439,
+      "clinicalResnum": 433,
+      "aa": "F",
+      "minDistanceToRifampicin": 2.68
+    },
+    {
+      "uniprotResnum": 440,
+      "clinicalResnum": 434,
+      "aa": "M",
+      "minDistanceToRifampicin": 4.29
+    },
+    {
+      "uniprotResnum": 441,
+      "clinicalResnum": 435,
+      "aa": "D",
+      "minDistanceToRifampicin": 3.14
+    },
+    {
+      "uniprotResnum": 451,
+      "clinicalResnum": 445,
+      "aa": "H",
+      "minDistanceToRifampicin": 3.42
+    },
+    {
+      "uniprotResnum": 454,
+      "clinicalResnum": 448,
+      "aa": "R",
+      "minDistanceToRifampicin": 3.06
+    },
+    {
+      "uniprotResnum": 456,
+      "clinicalResnum": 450,
+      "aa": "S",
+      "minDistanceToRifampicin": 2.43
+    },
+    {
+      "uniprotResnum": 458,
+      "clinicalResnum": 452,
+      "aa": "L",
+      "minDistanceToRifampicin": 3.7
+    },
+    {
+      "uniprotResnum": 459,
+      "clinicalResnum": 453,
+      "aa": "G",
+      "minDistanceToRifampicin": 4.69
+    },
+    {
+      "uniprotResnum": 465,
+      "clinicalResnum": 459,
+      "aa": "R",
+      "minDistanceToRifampicin": 3.57
+    },
+    {
+      "uniprotResnum": 489,
+      "clinicalResnum": 483,
+      "aa": "P",
+      "minDistanceToRifampicin": 3.8
+    },
+    {
+      "uniprotResnum": 493,
+      "clinicalResnum": 487,
+      "aa": "N",
+      "minDistanceToRifampicin": 3.45
+    },
+    {
+      "uniprotResnum": 497,
+      "clinicalResnum": 491,
+      "aa": "I",
+      "minDistanceToRifampicin": 3.34
+    },
+    {
+      "uniprotResnum": 610,
+      "clinicalResnum": 604,
+      "aa": "N",
+      "minDistanceToRifampicin": 4.33
+    },
+    {
+      "uniprotResnum": 613,
+      "clinicalResnum": 607,
+      "aa": "R",
+      "minDistanceToRifampicin": 3.41
+    },
+    {
+      "uniprotResnum": 680,
+      "clinicalResnum": 674,
+      "aa": "H",
+      "minDistanceToRifampicin": 3.57
+    }
+  ]
+}
