@@ -16,6 +16,11 @@ export interface ViewerFocus {
   ligandPoseFile: string;
   ligandCode: string;
   drug: string;
+  /** Instrumentation chrome only — not used for measurement. */
+  gene?: string;
+  proteinName?: string;
+  uniprotAccession?: string;
+  pdbId?: string;
 }
 
 let scriptPromise: Promise<void> | null = null;
@@ -45,6 +50,67 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
   const [assets, setAssets] = useState<{ pdb: string; ligand: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+
+  const restyle = () => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready) return;
+
+    viewer.removeAllLabels();
+    viewer.removeAllSurfaces();
+
+    // Base: a dim cartoon so the pocket reads as the subject, not the whole 1178-residue chain.
+    viewer.setStyle({}, { cartoon: { color: "#1e2a4a", opacity: 0.55 } });
+
+    // The drug, always shown.
+    if (focus) {
+      viewer.setStyle(
+        { resn: focus.ligandCode },
+        { stick: { colorscheme: "yellowCarbon", radius: 0.22 } },
+      );
+    }
+
+    if (focus) {
+      // Pocket residues in teal sticks.
+      viewer.addStyle(
+        { resi: focus.pocketUniprotResnums },
+        { stick: { color: "#2dd4bf", radius: 0.13 } },
+      );
+      viewer.addStyle({ resi: focus.pocketUniprotResnums }, { cartoon: { color: "#2dd4bf" } });
+
+      // The mutated residue in red, thicker, with a label.
+      viewer.addStyle(
+        { resi: focus.uniprotResnum },
+        { stick: { color: "#ef4444", radius: 0.3 }, sphere: { color: "#ef4444", radius: 0.45 } },
+      );
+      viewer.addLabel(focus.label, {
+        position: focus.center,
+        backgroundColor: "#ef4444",
+        backgroundOpacity: 0.9,
+        fontColor: "white",
+        fontSize: 13,
+        borderThickness: 0,
+        inFront: true,
+      });
+
+      // Frame the drug and its contact shell rather than the whole subunit.
+      viewer.zoomTo({ or: [{ resn: focus.ligandCode }, { resi: [focus.uniprotResnum] }] });
+      viewer.zoom(0.6);
+    } else {
+      viewer.zoomTo();
+    }
+
+    viewer.render();
+    const resizable = viewer as { resize?: () => void };
+    if (typeof resizable.resize === "function") resizable.resize();
+  };
+
+  const resizeCanvas = () => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready) return;
+    const resizable = viewer as { resize?: () => void };
+    if (typeof resizable.resize === "function") resizable.resize();
+    viewer.render();
+  };
 
   // Fetch the structure and the drug pose for whichever target is selected.
   useEffect(() => {
@@ -95,68 +161,62 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
     };
   }, [assets]);
 
-  // Re-style whenever the focus changes.
+  // Re-style whenever the focus changes, and again after layout so the canvas
+  // matches the chrome (title bar + legend strip) rather than a stale size.
   useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !ready) return;
-
-    viewer.removeAllLabels();
-    viewer.removeAllSurfaces();
-
-    // Base: a dim cartoon so the pocket reads as the subject, not the whole 1178-residue chain.
-    viewer.setStyle({}, { cartoon: { color: "#1e2a4a", opacity: 0.55 } });
-
-    // The drug, always shown.
-    if (focus) {
-      viewer.setStyle(
-        { resn: focus.ligandCode },
-        { stick: { colorscheme: "yellowCarbon", radius: 0.22 } },
-      );
-    }
-
-    if (focus) {
-      // Pocket residues in teal sticks.
-      viewer.addStyle(
-        { resi: focus.pocketUniprotResnums },
-        { stick: { color: "#2dd4bf", radius: 0.13 } },
-      );
-      viewer.addStyle({ resi: focus.pocketUniprotResnums }, { cartoon: { color: "#2dd4bf" } });
-
-      // The mutated residue in red, thicker, with a label.
-      viewer.addStyle(
-        { resi: focus.uniprotResnum },
-        { stick: { color: "#ef4444", radius: 0.3 }, sphere: { color: "#ef4444", radius: 0.45 } },
-      );
-      viewer.addLabel(focus.label, {
-        position: focus.center,
-        backgroundColor: "#ef4444",
-        backgroundOpacity: 0.9,
-        fontColor: "white",
-        fontSize: 13,
-        borderThickness: 0,
-        inFront: true,
-      });
-
-      // Frame the drug and its contact shell rather than the whole subunit.
-      viewer.zoomTo({ or: [{ resn: focus.ligandCode }, { resi: [focus.uniprotResnum] }] });
-      viewer.zoom(0.6);
-    } else {
-      viewer.zoomTo();
-    }
-
-    viewer.render();
+    restyle();
+    const node = containerRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => resizeCanvas());
+    ro.observe(node);
+    return () => ro.disconnect();
+    // restyle/resizeCanvas close over focus/ready/viewerRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, ready]);
 
+  const title = focus?.gene
+    ? `${focus.gene}${focus.proteinName ? ` · ${focus.proteinName}` : ""}`
+    : "Structure";
+  const accession = [
+    focus?.uniprotAccession ? `UniProt ${focus.uniprotAccession}` : null,
+    focus?.pdbId ? `PDB ${focus.pdbId}` : null,
+    focus?.drug ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-xl border border-slate-800 bg-[#0b1020]">
-      <div ref={containerRef} className="absolute inset-0" />
-      {(!ready || error) && (
-        <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-slate-400">
-          {error ?? "Loading structure…"}
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-slate-800/90 bg-[#0b1020] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800/90 bg-slate-950/80 px-3 py-2">
+        <div className="min-w-0">
+          <p className="font-display truncate text-sm text-slate-100">{title}</p>
+          {accession && (
+            <p className="mt-0.5 truncate font-mono text-[11px] tabular-nums text-slate-500">
+              {accession}
+            </p>
+          )}
         </div>
-      )}
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => restyle()}
+            disabled={!ready}
+            className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 transition hover:border-slate-500 hover:text-slate-100 disabled:opacity-40"
+          >
+            Reset view
+          </button>
+        </div>
+      </header>
+      <div className="relative min-h-0 flex-1">
+        <div ref={containerRef} className="absolute inset-0" />
+        {(!ready || error) && (
+          <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-slate-400">
+            {error ?? "Loading structure…"}
+          </div>
+        )}
+      </div>
       {ready && !error && (
-        <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-3 rounded-lg bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
+        <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-slate-800/90 bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
           <Legend color="#ef4444" label="mutated residue" />
           <Legend color="#2dd4bf" label={`${focus?.drug ?? "drug"}-contact residues`} />
           <Legend color="#eab308" label={focus?.drug ?? "drug"} />

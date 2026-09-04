@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CallBadge, LikelihoodBadge, ScoreBar } from "@/components/ScoreUI";
+import { DeterminateBar, IndeterminateBar } from "@/components/chrome";
 import type { EvalRow, EvaluationResult } from "@/lib/evaluation";
 
 interface NoGoldenSet {
@@ -121,16 +122,16 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
   if (noGolden) {
     const others = noGolden.available.map((t) => `${t.gene} + ${t.drug}`).join(", ");
     return (
-      <div className="max-w-3xl rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-        <p className="text-sm font-medium text-slate-200">
+      <div className="max-w-3xl rounded-xl border border-slate-800/80 bg-slate-900/40 px-5 py-4">
+        <p className="font-display text-lg text-slate-100">
           No labelled ground truth for {noGolden.target.gene} + {noGolden.target.drug}
         </p>
-        <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+        <p className="mt-2 text-sm leading-relaxed text-slate-400">
           An eval needs mutations somebody has already phenotyped, and curating that is a
           human judgement rather than something the pipeline can generate. Only {others || "no target"}{" "}
           has a hand-labelled set in this build, so that is the only target this view can score.
         </p>
-        <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">
           Everything else — the structural measurements, the ranking, the catalogue flag — works
           on this target exactly as it does on the scored one. What is missing is the evidence
           that the score is right here, and the honest thing is to say so rather than to show a
@@ -140,7 +141,11 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
     );
   }
   if (!data) {
-    return <p className="text-sm text-slate-400">Running the evaluation…</p>;
+    return (
+      <div className="max-w-xl">
+        <IndeterminateBar label="Running the evaluation…" hint="Deterministic scoring against the golden set." />
+      </div>
+    );
   }
 
   const { separation, generalization, knownFailure } = data;
@@ -152,17 +157,17 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
   }).length;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       <div>
-        <h2 className="text-sm font-medium text-slate-200">Separation and generalization eval</h2>
-        <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
+        <h2 className="font-display text-xl font-semibold text-slate-50">Separation and generalization eval</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
           {data.purpose} Two questions, asked separately: does the structural score split the
           hand-labelled classes, and does it still make the call when the catalogue is taken away?
         </p>
       </div>
 
       {/* ---- Eval 1: separation ---------------------------------------------------- */}
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-4">
         <SectionTitle
           n={1}
           title="Separation"
@@ -181,19 +186,19 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
           />
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
+        <div className="max-h-[min(70vh,40rem)] overflow-auto rounded-xl border border-slate-800/90">
           <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/60 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <th className="px-3 py-2 font-medium">Mutation</th>
-                <th className="px-3 py-2 font-medium">Label</th>
-                <th className="w-44 px-3 py-2 font-medium">Score</th>
-                <th className="w-36 px-3 py-2 font-medium">Structural call</th>
-                <th className="w-28 px-3 py-2 font-medium">To drug</th>
-                <th className="w-20 px-3 py-2 font-medium">pLDDT</th>
-                <th className="w-16 px-3 py-2 font-medium">Hit</th>
+              <tr className="sticky top-0 z-10 border-b-2 border-slate-700 bg-slate-900/95 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300 backdrop-blur">
+                <th className="px-3 py-2.5 font-semibold">Mutation</th>
+                <th className="px-3 py-2.5 font-semibold">Label</th>
+                <th className="w-44 px-3 py-2.5 font-semibold">Score</th>
+                <th className="w-36 px-3 py-2.5 font-semibold">Structural call</th>
+                <th className="w-28 px-3 py-2.5 font-semibold">To drug</th>
+                <th className="w-20 px-3 py-2.5 font-semibold">pLDDT</th>
+                <th className="w-16 px-3 py-2.5 font-semibold">Hit</th>
                 {(modelBusy || scored.length > 0) && (
-                  <th className="w-28 px-3 py-2 font-medium">Model</th>
+                  <th className="w-28 px-3 py-2.5 font-semibold">Model</th>
                 )}
               </tr>
             </thead>
@@ -211,7 +216,7 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
             onClick={() => void runModel()}
@@ -221,10 +226,12 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
             {modelBusy ? "Asking the model…" : "Also score the model on this set"}
           </button>
           {modelBusy && (
-            <span className="flex items-center gap-1.5 text-xs text-slate-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-              {modelDone}/{separation.rows.length} · <Elapsed />
-            </span>
+            <DeterminateBar
+              done={modelDone}
+              total={separation.rows.length}
+              label="scored"
+              elapsed={<Elapsed />}
+            />
           )}
           {!modelBusy && scored.length > 0 && (
             <span className="text-xs text-slate-400">
@@ -238,7 +245,7 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
           )}
         </div>
 
-        <p className="text-[11px] leading-relaxed text-slate-500">
+        <p className="text-xs leading-relaxed text-slate-500">
           The model scored here is the <span className="text-slate-300">pipeline</span>, which is
           never shown the catalogue. The agent is deliberately not scored: it can call{" "}
           <span className="font-mono">catalogue_lookup</span>, so on a catalogued mutation it can
@@ -265,26 +272,26 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
       </section>
 
       {/* ---- Eval 2: generalization ------------------------------------------------ */}
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-4">
         <SectionTitle
           n={2}
           title="Generalization past the catalogue"
           subtitle={generalization.description}
         />
 
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
+        <div className="max-h-[min(50vh,28rem)] overflow-auto rounded-xl border border-slate-800/90">
           <table className="w-full min-w-[700px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/60 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <th className="px-3 py-2 font-medium">Mutation</th>
-                <th className="px-3 py-2 font-medium">Catalogue lookup, blinded</th>
-                <th className="w-44 px-3 py-2 font-medium">Structural call</th>
-                <th className="w-24 px-3 py-2 font-medium">Caught</th>
+              <tr className="sticky top-0 z-10 border-b-2 border-slate-700 bg-slate-900/95 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300 backdrop-blur">
+                <th className="px-3 py-2.5 font-semibold">Mutation</th>
+                <th className="px-3 py-2.5 font-semibold">Catalogue lookup, blinded</th>
+                <th className="w-44 px-3 py-2.5 font-semibold">Structural call</th>
+                <th className="w-24 px-3 py-2.5 font-semibold">Caught</th>
               </tr>
             </thead>
             <tbody>
               {generalization.rows.map((row) => (
-                <tr key={row.mutation} className="border-b border-slate-800/70 last:border-0">
+                <tr key={row.mutation} className="border-b border-slate-800/50 last:border-0 even:bg-slate-800/25">
                   <td className="px-3 py-2 align-top font-mono text-slate-100">{row.mutation}</td>
                   <td className="px-3 py-2 align-top">
                     <span className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[11px] text-slate-300">
@@ -330,12 +337,12 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
 
       {/* ---- The declared failure -------------------------------------------------- */}
       {knownFailure && knownFailure.rows.length > 0 && (
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-4">
           <SectionTitle n={3} title="Declared failure case" subtitle={knownFailure.description} />
           {knownFailure.rows.map((row) => (
             <div
               key={row.mutation}
-              className="rounded-xl border border-amber-800 bg-amber-950/25 px-4 py-3"
+              className="rounded-xl border border-amber-800/80 bg-amber-950/25 px-5 py-4"
             >
               <div className="flex flex-wrap items-center gap-3">
                 <span className="font-mono text-slate-100">{row.mutation}</span>
@@ -360,17 +367,17 @@ export default function EvalPanel({ targetId }: { targetId: string }) {
       )}
 
       {/* ---- The honest reading ---------------------------------------------------- */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-        <p className="text-xs uppercase tracking-wide text-slate-400">How to read this</p>
-        <ul className="mt-2 space-y-2 text-xs leading-relaxed text-slate-400">
+      <section className="px-1 py-1">
+        <p className="font-display text-base text-slate-100">How to read this</p>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-slate-400">
           {data.interpretation.map((line) => (
             <li key={line}>· {line}</li>
           ))}
         </ul>
       </section>
 
-      <details className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-        <summary className="cursor-pointer text-xs uppercase tracking-wide text-slate-400">
+      <details className="px-1">
+        <summary className="cursor-pointer text-xs uppercase tracking-[0.14em] text-slate-500">
           The score being evaluated
         </summary>
         <ul className="mt-2 space-y-1 text-xs leading-relaxed text-slate-500">
@@ -401,9 +408,9 @@ function SeparationRow({
 }) {
   const answer = reasoning?.reasoning ?? null;
   return (
-    <tr className="border-b border-slate-800/70 last:border-0">
-      <td className="px-3 py-2 align-middle font-mono text-slate-100">{row.mutation}</td>
-      <td className="px-3 py-2 align-middle">
+    <tr className="border-b border-slate-800/50 last:border-0 even:bg-slate-800/25">
+      <td className="px-3 py-2.5 align-middle font-mono text-slate-100">{row.mutation}</td>
+      <td className="px-3 py-2.5 align-middle">
         <span
           className={`rounded border px-1.5 py-0.5 text-[11px] ${
             row.label === "resistant"
@@ -417,17 +424,17 @@ function SeparationRow({
           <span className="ml-1.5 font-mono text-[10px] text-slate-500">{row.evidence}</span>
         )}
       </td>
-      <td className="px-3 py-2 align-middle">
+      <td className="px-3 py-2.5 align-middle">
         <ScoreBar score={row.score.score} />
       </td>
-      <td className="px-3 py-2 align-middle">
+      <td className="px-3 py-2.5 align-middle">
         <CallBadge call={row.score.call} />
       </td>
-      <td className="px-3 py-2 align-middle font-mono text-xs text-slate-300">
+      <td className="px-3 py-2.5 align-middle font-mono tabular-nums text-xs text-slate-300">
         {row.measuredDistanceAngstroms} Å
       </td>
-      <td className="px-3 py-2 align-middle font-mono text-xs text-slate-400">{row.plddt}</td>
-      <td className="px-3 py-2 align-middle">
+      <td className="px-3 py-2.5 align-middle font-mono tabular-nums text-xs text-slate-400">{row.plddt}</td>
+      <td className="px-3 py-2.5 align-middle">
         {row.correct ? (
           <span className="text-teal-300">✓</span>
         ) : (
@@ -435,7 +442,7 @@ function SeparationRow({
         )}
       </td>
       {showModel && (
-        <td className="px-3 py-2 align-middle">
+        <td className="px-3 py-2.5 align-middle">
           {answer ? (
             <LikelihoodBadge likelihood={answer.resistanceLikelihood} />
           ) : pending ? (
@@ -456,18 +463,18 @@ function Elapsed() {
     const id = setInterval(() => setSeconds((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, []);
-  return <span className="font-mono">{seconds}s</span>;
+  return <span className="font-mono tabular-nums">{seconds}s</span>;
 }
 
 function SectionTitle({ n, title, subtitle }: { n: number; title: string; subtitle: string }) {
   return (
-    <div className="flex gap-3">
-      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-slate-700 text-[11px] text-slate-400">
+    <div className="flex gap-4">
+      <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-700 font-display text-sm text-slate-300">
         {n}
       </span>
       <div>
-        <p className="text-sm font-medium text-slate-200">{title}</p>
-        <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-slate-500">{subtitle}</p>
+        <p className="font-display text-lg text-slate-100">{title}</p>
+        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500">{subtitle}</p>
       </div>
     </div>
   );
@@ -475,19 +482,19 @@ function SectionTitle({ n, title, subtitle }: { n: number; title: string; subtit
 
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="font-mono text-base text-slate-100">{value}</p>
-      {note && <p className="font-mono text-[10px] text-slate-500">{note}</p>}
+    <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-1 font-mono tabular-nums text-xl text-slate-100">{value}</p>
+      {note && <p className="mt-0.5 font-mono tabular-nums text-[11px] text-slate-500">{note}</p>}
     </div>
   );
 }
 
 function Caveat({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{title}</p>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-slate-500">{children}</div>
+    <div className="px-1 py-1">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{title}</p>
+      <div className="mt-2 text-xs leading-relaxed text-slate-500">{children}</div>
     </div>
   );
 }

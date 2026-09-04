@@ -80,35 +80,41 @@ export default function AffinityPanel({
   const comparison = data?.comparison ?? null;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-violet-900/50 bg-violet-950/15">
+      <div className="border-l-[3px] border-l-violet-400 px-5 py-4">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs uppercase tracking-wide text-slate-400">
-          Predicted rifampicin affinity · wild type vs mutant
-        </p>
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-violet-300">
+            Predicted
+          </p>
+          <p className="font-display mt-1 text-base text-slate-100">
+            Predicted rifampicin affinity · wild type vs mutant
+          </p>
+        </div>
         {comparison && (
           <span className="font-mono text-[11px] text-slate-500">
             Boltz-2 ·{" "}
-            <span className={comparison.source === "live" ? "text-teal-400" : "text-slate-500"}>
+            <span className={comparison.source === "live" ? "text-violet-300" : "text-slate-500"}>
               {comparison.source}
             </span>
           </span>
         )}
       </div>
 
-      {busy && <p className="mt-2 text-xs text-slate-400">Loading the cached comparison…</p>}
+      {busy && <p className="mt-3 text-sm text-slate-400">Loading the cached comparison…</p>}
 
       {error && (
-        <p className="mt-2 rounded-lg border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-300">
+        <p className="mt-3 rounded-lg border border-amber-900/70 bg-amber-950/35 px-3 py-2 text-sm text-amber-200">
           {error}
         </p>
       )}
 
       {!busy && !error && data?.unavailable && (
-        <p className="mt-2 text-xs leading-relaxed text-slate-500">{data.unavailable}</p>
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">{data.unavailable}</p>
       )}
 
       {data?.fellBackTo && (
-        <p className="mt-2 rounded-lg border border-amber-900 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
+        <p className="mt-3 rounded-lg border border-amber-900/70 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
           {data.fellBackTo}
         </p>
       )}
@@ -119,11 +125,11 @@ export default function AffinityPanel({
           <ReplicateStrip comparison={comparison} />
           <Arms comparison={comparison} />
 
-          <details className="mt-3 border-t border-slate-800 pt-2">
+          <details className="mt-4 pt-1">
             <summary className="cursor-pointer text-xs text-slate-500">
               What this prediction is, and what it is not
             </summary>
-            <ul className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-slate-500">
+            <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-slate-500">
               {comparison.caveats.map((c) => (
                 <li key={c}>· {c}</li>
               ))}
@@ -143,22 +149,28 @@ export default function AffinityPanel({
       )}
 
       {data?.liveAvailable && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2.5">
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-violet-900/40 pt-3">
           <button
             type="button"
             onClick={() => void runLive()}
             disabled={liveBusy}
-            className="rounded-lg border border-teal-700 bg-teal-950/60 px-3 py-1.5 text-xs text-teal-300 transition hover:bg-teal-900/60 disabled:opacity-50"
+            className="rounded-lg border border-violet-700 bg-violet-950/60 px-3 py-1.5 text-xs text-violet-200 transition hover:bg-violet-900/60 disabled:opacity-50"
           >
             {liveBusy ? "Co-folding…" : "Re-run live (3 replicates each)"}
           </button>
-          <span className="text-[11px] text-slate-500">
+          <span className="text-xs text-slate-500">
             {liveBusy
               ? "Six co-folds of a 1178-residue chain; about four minutes."
               : "Cloud GPU, rate-limited. The cached result above stands if it fails."}
           </span>
         </div>
       )}
+      {liveBusy && (
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-slate-800">
+          <div className="h-full w-1/3 animate-progress rounded-full bg-violet-400/90" />
+        </div>
+      )}
+      </div>
     </div>
   );
 }
@@ -176,19 +188,19 @@ function Verdict({ comparison }: { comparison: AffinityComparison }) {
       }`}
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mono text-lg text-slate-100">
+        <span className="font-mono tabular-nums text-xl text-slate-100">
           {comparison.deltaLog10 > 0 ? "+" : ""}
           {comparison.deltaLog10.toFixed(2)}
         </span>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-xs text-slate-400">
           Δ log₁₀ IC₅₀ (mutant − wild type) · ± {comparison.standardError.toFixed(2)} SE ·{" "}
           {comparison.separationSe.toFixed(1)}σ
         </span>
       </div>
-      <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{comparison.verdict}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{comparison.verdict}</p>
 
       {/* The reason the panel replicates at all, stated in the numbers from this very run. */}
-      <p className="mt-2 border-t border-slate-700/60 pt-2 text-[11px] leading-relaxed text-slate-400">
+      <p className="mt-2 border-t border-slate-700/60 pt-2 text-xs leading-relaxed text-slate-400">
         One run of each would have been enough to tell any story you liked: across the{" "}
         <span className="font-mono text-slate-300">{comparison.singlePair.pairs}</span> ways of
         pairing these replicates, the answer ranges from{" "}
@@ -224,7 +236,7 @@ function ReplicateStrip({ comparison }: { comparison: AffinityComparison }) {
 
   const row = (a: AffinityArm, colour: string, dot: string) => (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-right text-[11px] text-slate-400">{a.label}</span>
+      <span className="w-16 shrink-0 text-right text-xs text-slate-400">{a.label}</span>
       <span className="relative h-6 flex-1 rounded bg-slate-950/60">
         {a.values.map((v, i) => (
           <span
@@ -240,7 +252,7 @@ function ReplicateStrip({ comparison }: { comparison: AffinityComparison }) {
           title={`mean ${a.affinityMean.toFixed(3)}`}
         />
       </span>
-      <span className="w-24 shrink-0 font-mono text-[11px] text-slate-300">
+      <span className="w-24 shrink-0 font-mono tabular-nums text-xs text-slate-300">
         {a.affinityMean.toFixed(2)} ± {a.affinitySd.toFixed(2)}
       </span>
     </div>
@@ -265,8 +277,8 @@ function ReplicateStrip({ comparison }: { comparison: AffinityComparison }) {
 
 function Arms({ comparison }: { comparison: AffinityComparison }) {
   const cell = (a: AffinityArm) => (
-    <div className="flex-1 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{a.label}</p>
+    <div className="flex-1 rounded-lg bg-slate-950/40 px-3 py-2">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{a.label}</p>
       <dl className="mt-1 space-y-0.5 text-[11px] text-slate-400">
         <Row k="replicates" v={String(a.n)} />
         <Row k="P(binder)" v={a.bindingProbabilityMean.toFixed(2)} />
@@ -282,7 +294,7 @@ function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between gap-2">
       <dt>{k}</dt>
-      <dd className="font-mono text-slate-300">{v}</dd>
+      <dd className="font-mono tabular-nums text-slate-300">{v}</dd>
     </div>
   );
 }

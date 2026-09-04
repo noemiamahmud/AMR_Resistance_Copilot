@@ -1,10 +1,47 @@
 import type { Metadata } from "next";
+import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
+const sourceSans = Source_Sans_3({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-source-sans",
+});
+
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-source-serif",
+});
+
 export const metadata: Metadata = {
-  title: "AMR Resistance Copilot",
+  title: {
+    default: "AMR Resistance Copilot",
+    template: "%s",
+  },
   description:
     "Structure-grounded mechanistic interpretation of antimicrobial-resistance mutations.",
+  applicationName: "AMR Resistance Copilot",
+  keywords: [
+    "antimicrobial resistance",
+    "AMR",
+    "structure",
+    "mutation",
+    "genomics",
+    "drug target",
+  ],
+  openGraph: {
+    title: "AMR Resistance Copilot",
+    description:
+      "Structure-grounded mechanistic interpretation of antimicrobial-resistance mutations.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AMR Resistance Copilot",
+    description:
+      "Structure-grounded mechanistic interpretation of antimicrobial-resistance mutations.",
+  },
 };
 
 /**
@@ -22,8 +59,12 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="min-h-full" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${sourceSans.variable} ${sourceSerif.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <body className="min-h-full font-sans" suppressHydrationWarning>
         {children}
       </body>
     </html>

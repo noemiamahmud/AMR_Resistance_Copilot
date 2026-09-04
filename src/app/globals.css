@@ -2,19 +2,25 @@
 
 /*
  * Fixed dark theme: the molecular viewer renders on a dark canvas, so a light
- * mode would fight it. Fonts are system stacks so the app builds and runs with
- * no network access at all.
+ * mode would fight it. Display and body faces are self-hosted via next/font
+ * (no Google Fonts CDN at request time). Mono stays a system stack and is
+ * reserved for numbers, coordinates, and code-like tokens.
  */
 :root {
   --background: #070b16;
   --foreground: #e2e8f0;
+  --measured: #2dd4bf;
+  --predicted: #c4b5fd;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-display: var(--font-source-serif), ui-serif, Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --animate-progress: progress-indeterminate 1.35s ease-in-out infinite;
 }
 
 html {
@@ -22,7 +28,37 @@ html {
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% -22%, rgba(45, 212, 191, 0.1), transparent 58%),
+    radial-gradient(ellipse 42% 38% at 100% 0%, rgba(167, 139, 250, 0.08), transparent 52%),
+    radial-gradient(ellipse 36% 28% at 0% 85%, rgba(14, 165, 233, 0.045), transparent 50%);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* Grain on the page shell only — panels sit above it and stay clean. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
 }

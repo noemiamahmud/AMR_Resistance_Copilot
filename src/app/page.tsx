@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import AffinityPanel from "@/components/AffinityPanel";
+import { IndeterminateBar, ResultSkeleton, Wordmark } from "@/components/chrome";
 import EvalPanel from "@/components/EvalPanel";
 import StructureViewer, { ViewerFocus } from "@/components/StructureViewer";
 import TriagePanel from "@/components/TriagePanel";
@@ -83,6 +84,16 @@ export default function Home() {
   const [lastQuery, setLastQuery] = useState(HERO_MUTATION);
   const [health, setHealth] = useState<ModelHealth | null>(null);
   const reasoningAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const apply = () => {
+      document.title = VIEW_DOCUMENT_TITLE[view];
+    };
+    apply();
+    // Next.js metadata can rewrite <title> after hydration; re-apply once the paint settles.
+    const id = window.setTimeout(apply, 0);
+    return () => window.clearTimeout(id);
+  }, [view]);
 
   /** Ask the local model for a mechanism, cancelling any question still in flight. */
   const requestReasoning = useCallback(async (mutation: string, nextMode: Mode, target: string) => {
@@ -189,6 +200,10 @@ export default function Home() {
         ligandPoseFile: result.target.ligandPoseFile,
         ligandCode: ligandCodeFor(targets, result.target.id),
         drug: result.target.drug,
+        gene: result.target.gene,
+        proteinName: result.target.proteinName,
+        uniprotAccession: result.target.uniprotAccession,
+        pdbId: result.pocket.pdbId,
       }
     : null;
 
@@ -211,20 +226,23 @@ export default function Home() {
   const viewerFocus = view === "triage" ? (triageFocus ?? focus) : focus;
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1500px] p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-100">
-          AMR Resistance Copilot
-        </h1>
-        <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-slate-400">
-          Structure-grounded interpretation of antimicrobial-resistance mutations. Locates the
-          mutation on the drug target and measures its relationship to the drug-binding site —
-          including for mutations no catalogue has seen.
-        </p>
+    <main className="mx-auto min-h-screen max-w-[1500px] px-8 py-8">
+      <header className="flex items-start gap-4">
+        <Wordmark />
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-slate-50">
+            AMR Resistance Copilot
+          </h1>
+          <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-400">
+            Structure-grounded interpretation of antimicrobial-resistance mutations. Locates the
+            mutation on the drug target and measures its relationship to the drug-binding site —
+            including for mutations no catalogue has seen.
+          </p>
+        </div>
       </header>
 
-      <nav className="mt-5 flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-slate-700">
+      <nav className="mt-8 flex flex-wrap items-center gap-4">
+        <div className="flex overflow-hidden rounded-lg border border-slate-700/80">
           <ViewButton active={view === "single"} onClick={() => setView("single")}>
             One mutation
           </ViewButton>
@@ -235,18 +253,18 @@ export default function Home() {
             Eval
           </ViewButton>
         </div>
-        <span className="text-xs text-slate-500">{VIEW_BLURB[view]}</span>
+        <span className="text-sm text-slate-500">{VIEW_BLURB[view]}</span>
       </nav>
 
       {/* Both working views stay mounted. Switching to the eval and back during a demo must
           not discard a triage table whose mechanisms took a minute of local inference to
           fill in, and it keeps the viewer from re-parsing the structure on every switch. */}
       <div
-        className={`mt-6 grid-cols-1 gap-6 ${view === "eval" ? "hidden" : "grid"} ${
+        className={`mt-8 grid-cols-1 gap-8 ${view === "eval" ? "hidden" : "grid"} ${
           view === "single" ? "lg:grid-cols-[440px_1fr]" : "lg:grid-cols-[minmax(0,1fr)_430px]"
         }`}
       >
-        <section className={view === "triage" ? "min-w-0" : "hidden"}>
+        <section className={view === "triage" ? "min-h-0 min-w-0 overflow-y-auto lg:max-h-[calc(100vh-12rem)]" : "hidden"}>
           {/* Keyed by target: switching gene strands the old isolate against a structure
               that does not contain those residues, so the panel is rebuilt rather than
               patched up field by field. */}
@@ -263,7 +281,7 @@ export default function Home() {
           />
         </section>
 
-        <section className={view === "single" ? "flex flex-col gap-5" : "hidden"}>
+        <section className={view === "single" ? "flex min-h-0 flex-col gap-8 overflow-y-auto lg:max-h-[calc(100vh-12rem)]" : "hidden"}>
           <TargetPicker targets={targets} active={targetId} onChange={switchTarget} />
 
           <form
@@ -271,9 +289,9 @@ export default function Home() {
               e.preventDefault();
               void analyse(input);
             }}
-            className="flex flex-col gap-3"
+            className="flex flex-col gap-2"
           >
-            <label htmlFor="mutation" className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <label htmlFor="mutation" className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
               Gene and mutation
             </label>
             <div className="flex gap-2">
@@ -283,18 +301,18 @@ export default function Home() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="rpoB S450L"
                 spellCheck={false}
-                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-500"
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 font-mono text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-400"
               />
               <button
                 type="submit"
                 disabled={busy}
-                className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
+                className="rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
               >
                 {busy ? "Analysing…" : "Analyse"}
               </button>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <p className="text-[11px] leading-relaxed text-slate-500">
+            <div className="mt-2 flex flex-col gap-2">
+              <p className="text-xs leading-relaxed text-slate-500">
                 Cases worth trying on {active?.gene ?? HERO_TARGET.gene} — hover any button for
                 what it demonstrates. <span className="text-fuchsia-400">Pink</span> is absent
                 from the catalogue, which is the case this tool exists for;{" "}
@@ -322,9 +340,9 @@ export default function Home() {
             </div>
           </form>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-slate-500">Reasoning</span>
-            <div className="flex overflow-hidden rounded-lg border border-slate-700">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Reasoning</span>
+            <div className="flex overflow-hidden rounded-lg border border-slate-700/80">
               <ModeButton active={mode === "pipeline"} onClick={() => switchMode("pipeline")}>
                 Pipeline
               </ModeButton>
@@ -332,7 +350,7 @@ export default function Home() {
                 Agent + tool trace
               </ModeButton>
             </div>
-            <span className="text-xs text-slate-500">
+            <span className="text-sm text-slate-500">
               {mode === "pipeline"
                 ? "one call over precomputed features"
                 : "the model measures the structure itself · ~1 min"}
@@ -340,10 +358,12 @@ export default function Home() {
           </div>
 
           {error && (
-            <p className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300">
+            <p className="rounded-lg border border-red-900/80 bg-red-950/50 px-4 py-3 text-sm text-red-300">
               {error}
             </p>
           )}
+
+          {busy && !result && <ResultSkeleton />}
 
           {result && (
             <ResultPanel
@@ -358,7 +378,7 @@ export default function Home() {
           )}
         </section>
 
-        <section className="min-h-[520px] lg:sticky lg:top-6 lg:h-[calc(100vh-13rem)]">
+        <section className="min-h-[520px] lg:sticky lg:top-8 lg:h-[calc(100vh-12rem)]">
           <StructureViewer focus={viewerFocus} />
         </section>
       </div>
@@ -366,7 +386,7 @@ export default function Home() {
       {/* Mounted alongside the others, for the same reason: scoring the model over the golden
           set costs a couple of minutes of local inference, and switching tabs to point at the
           structure must not throw it away. It also makes the tab open instantly. */}
-      <div className={view === "eval" ? "mt-6" : "hidden"}>
+      <div className={view === "eval" ? "mt-8" : "hidden"}>
         <EvalPanel targetId={targetId} />
       </div>
     </main>
@@ -392,14 +412,14 @@ function TargetPicker({
   const current = targets.find((t) => t.id === active) ?? null;
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor="target" className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <label htmlFor="target" className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
         Drug target — the protein the antibiotic has to hit
       </label>
       <select
         id="target"
         value={active}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-500"
+        className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-teal-400"
       >
         {(targets.length ? targets : []).map((t) => (
           <option key={t.id} value={t.id}>
@@ -409,9 +429,9 @@ function TargetPicker({
         {targets.length === 0 && <option>loading…</option>}
       </select>
       {current && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2">
-          <p className="text-xs leading-relaxed text-slate-400">{current.blurb}</p>
-          <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-slate-600">
+        <div className="px-1 py-1">
+          <p className="text-sm leading-relaxed text-slate-400">{current.blurb}</p>
+          <p className="mt-2 font-mono text-[11px] leading-relaxed text-slate-600">
             {current.proteinName} · {current.organism} · AlphaFold {current.uniprotAccession} ·
             drug pose from PDB {current.complexPdbId} ({current.ligandCode}) ·{" "}
             {current.clinicalToUniprotOffset === 0
@@ -445,18 +465,21 @@ function ResultPanel({
   const contact = structure.drug.proximity === "drug-contacting";
 
   return (
-    <div className="flex flex-col gap-4 text-sm">
+    <div className="flex flex-col gap-8 text-sm">
+      <div className="flex flex-col gap-4">
       <div
-        className={`rounded-xl border px-4 py-3 ${
-          contact ? "border-amber-700 bg-amber-950/40" : "border-slate-700 bg-slate-900/60"
+        className={`rounded-2xl border border-l-[3px] px-6 py-5 ${
+          contact
+            ? "border-amber-800/70 border-l-amber-400 bg-amber-950/35"
+            : "border-slate-800/80 border-l-teal-400 bg-slate-900/50"
         }`}
       >
-        <p className="text-xs uppercase tracking-wide text-slate-400">Structural call</p>
-        <p className="mt-1 leading-relaxed text-slate-100">{result.headline}</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">Structural call</p>
+        <p className="font-display mt-2 text-xl leading-snug text-slate-50">{result.headline}</p>
       </div>
 
       {!result.validation.matchesInput && (
-        <p className="rounded-lg border border-amber-800 bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-300">
+        <p className="rounded-lg border border-amber-800/70 bg-amber-950/35 px-4 py-2.5 text-sm leading-relaxed text-amber-200">
           {result.validation.message}
         </p>
       )}
@@ -473,10 +496,12 @@ function ResultPanel({
         catalogue={catalogue}
         drug={structure.drug}
       />
+      </div>
 
       {/* The stretch. Everything above is measured; this one predicts, and says so. */}
       <AffinityPanel mutation={result.input.canonical} targetId={result.target.id} />
 
+      <div className="flex flex-col gap-4">
       <Card title="Measured from coordinates">
         <Metric
           label={`Closest approach to ${result.target.drug}`}
@@ -507,7 +532,7 @@ function ResultPanel({
       </Card>
 
       <Card title="Substitution">
-        <p className="leading-relaxed text-slate-300">{substitution.summary}</p>
+        <p className="text-sm leading-relaxed text-slate-300">{substitution.summary}</p>
         <p className="mt-1 text-xs text-slate-500">
           {substitution.wildType.name} → {substitution.mutant.name}; hydropathy shift{" "}
           {substitution.hydropathyShift > 0 ? "+" : ""}
@@ -516,14 +541,15 @@ function ResultPanel({
       </Card>
 
       <Card title="Numbering">
-        <p className="text-xs leading-relaxed text-slate-400">{numbering.explanation}</p>
+        <p className="text-sm leading-relaxed text-slate-400">{numbering.explanation}</p>
       </Card>
+      </div>
 
-      <details className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-        <summary className="cursor-pointer text-xs uppercase tracking-wide text-slate-400">
+      <details className="px-1">
+        <summary className="cursor-pointer text-xs uppercase tracking-[0.14em] text-slate-500">
           Provenance
         </summary>
-        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-slate-500">
+        <ul className="mt-2 space-y-1 pl-1 text-xs leading-relaxed text-slate-500">
           {result.provenance.map((p) => (
             <li key={p}>· {p}</li>
           ))}
@@ -552,33 +578,35 @@ function CatalogueBanner({
 
   return (
     <div
-      className={`rounded-xl border px-4 py-3 ${
-        known ? "border-slate-700 bg-slate-900/60" : "border-fuchsia-800 bg-fuchsia-950/30"
+      className={`rounded-xl border px-5 py-4 ${
+        known
+          ? "border-slate-800/80 bg-slate-900/45"
+          : "border-fuchsia-800/70 bg-fuchsia-950/25"
       }`}
     >
       <div className="flex items-baseline justify-between gap-3">
         <span
-          className={`rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide ${
+          className={`rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-[0.12em] ${
             known ? "bg-slate-700 text-slate-200" : "bg-fuchsia-700 text-fuchsia-50"
           }`}
         >
           {known ? `In ${catalogue.name.split(" ")[0]}` : "Not in the catalogue"}
         </span>
-        <span className="font-mono text-[11px] text-slate-500">
+        <span className="font-mono tabular-nums text-[11px] text-slate-500">
           {catalogue.entryCount} substitutions · {catalogue.residuesCovered} residues
         </span>
       </div>
 
-      <p className="mt-2 leading-relaxed text-slate-200">{catalogue.catalogueOnly.verdict}</p>
+      <p className="mt-3 text-base leading-relaxed text-slate-100">{catalogue.catalogueOnly.verdict}</p>
 
-      <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+      <p className="mt-2 text-sm leading-relaxed text-slate-400">
         {known
           ? "The catalogue already covers this one. The structural call above is an independent read of the same mutation — the same reasoning that has to stand alone when the catalogue is silent."
           : "This is where a catalogue stops, and surveillance keeps producing mutations no catalogue has seen. Everything above and below is measured from the structure, so the call still gets made."}
       </p>
 
       {!known && sameResidue.length > 0 && (
-        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+        <p className="mt-3 text-sm leading-relaxed text-slate-400">
           It does list {sameResidue.length} other substitution
           {sameResidue.length === 1 ? "" : "s"} at residue {residue}:{" "}
           <span className="font-mono text-slate-300">{shown.join(", ")}</span>
@@ -588,7 +616,7 @@ function CatalogueBanner({
       )}
 
       {!known && nearby.length > 0 && (
-        <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+        <p className="mt-2 text-sm leading-relaxed text-slate-400">
           Catalogued resistance residues within 8 Å of it:{" "}
           <span className="font-mono text-slate-300">
             {nearby.map((n) => `${n.aa}${n.clinicalResnum} ${n.distanceAngstroms} Å`).join(" · ")}
@@ -598,7 +626,7 @@ function CatalogueBanner({
       )}
 
       {known && catalogue.exactMatch && (
-        <p className="mt-2 font-mono text-[11px] text-slate-500">
+        <p className="mt-3 font-mono text-[11px] text-slate-500">
           {catalogue.aro} · {catalogue.exactMatch.evidence} · {catalogue.exactMatch.variantType}
         </p>
       )}
@@ -661,12 +689,12 @@ function ReasoningPanel({
   const modelName = run?.model ?? health?.model ?? "qwen3:8b";
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+    <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 px-5 py-4">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs uppercase tracking-wide text-slate-400">
+        <p className="font-display text-base text-slate-100">
           Mechanistic hypothesis{mode === "agent" ? " · agent" : ""}
         </p>
-        <p className="font-mono text-[11px] text-slate-500">
+        <p className="font-mono tabular-nums text-[11px] text-slate-500">
           {modelName} · local
           {run ? ` · ${(run.latencyMs / 1000).toFixed(1)}s` : ""}
           {agent && mode === "agent" ? ` · ${agent.trace.length} tool calls` : ""}
@@ -676,7 +704,7 @@ function ReasoningPanel({
       {busy && <Thinking mode={mode} />}
 
       {!busy && error && (
-        <div className="mt-2 rounded-lg border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-300">
+        <div className="mt-3 rounded-lg border border-amber-900/70 bg-amber-950/35 px-4 py-2.5 text-sm leading-relaxed text-amber-200">
           {error}
           <span className="mt-1 block text-amber-400/70">
             The measurements above are computed locally and stand without the model.
@@ -685,24 +713,24 @@ function ReasoningPanel({
       )}
 
       {!busy && !error && answer && (
-        <div className="mt-2.5 flex flex-col gap-3">
+        <div className="mt-4 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <span
-              className={`rounded border px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${
+              className={`rounded border px-2 py-0.5 text-xs font-medium uppercase tracking-[0.12em] ${
                 LIKELIHOOD_STYLES[answer.resistanceLikelihood]
               }`}
             >
               {answer.resistanceLikelihood} resistance likelihood
             </span>
           </div>
-          <p className="leading-relaxed text-slate-200">{answer.mechanismHypothesis}</p>
+          <p className="text-base leading-relaxed text-slate-100">{answer.mechanismHypothesis}</p>
           <Field label="Caveat">{answer.confidenceCaveat}</Field>
           <Field label="What would confirm it">{answer.whatWouldConfirm}</Field>
           {(() => {
             const note = disagreementNote(catalogue, drug, answer.resistanceLikelihood);
             return note ? (
-              <p className="rounded-lg border border-amber-800 bg-amber-950/30 px-3 py-2 text-xs leading-relaxed text-amber-300">
-                <span className="font-medium uppercase tracking-wide">Disagreement · </span>
+              <p className="rounded-lg border border-amber-800/70 bg-amber-950/25 px-4 py-2.5 text-sm leading-relaxed text-amber-200">
+                <span className="font-medium uppercase tracking-[0.12em]">Disagreement · </span>
                 {note}
               </p>
             ) : null;
@@ -711,13 +739,13 @@ function ReasoningPanel({
       )}
 
       {!busy && !error && prose && (
-        <p className="mt-2.5 whitespace-pre-wrap leading-relaxed text-slate-200">{prose}</p>
+        <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{prose}</p>
       )}
 
       {!busy && !error && mode === "agent" && agent && <ToolTrace agent={agent} />}
 
       {!busy && !error && mode === "pipeline" && reasoning && (
-        <details className="mt-3 border-t border-slate-800 pt-2">
+        <details className="mt-4 border-t border-slate-800/80 pt-3">
           <summary className="cursor-pointer text-xs text-slate-500">
             Evidence handed to the model
           </summary>
@@ -725,14 +753,14 @@ function ReasoningPanel({
             The model sees only these measurements. The catalogue verdict is deliberately withheld,
             so its answer cannot be a memory of a famous mutation.
           </p>
-          <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-2.5 font-mono text-[11px] leading-relaxed text-slate-400">
+          <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 font-mono text-[11px] leading-relaxed text-slate-400">
             {JSON.stringify(reasoning.features, null, 2)}
           </pre>
         </details>
       )}
 
       {!busy && !error && notes.length > 0 && (
-        <ul className="mt-2 space-y-1 text-xs text-amber-400/80">
+        <ul className="mt-3 space-y-1 text-xs text-amber-400/80">
           {notes.map((n) => (
             <li key={n}>· {n}</li>
           ))}
@@ -749,7 +777,7 @@ function ReasoningPanel({
  */
 function ToolTrace({ agent }: { agent: AgentRun }) {
   return (
-    <details open className="mt-3 border-t border-slate-800 pt-2">
+    <details open className="mt-4 border-t border-slate-800/80 pt-3">
       <summary className="cursor-pointer text-xs text-slate-500">
         Tool trace — {agent.trace.length} call{agent.trace.length === 1 ? "" : "s"} over{" "}
         {agent.turns} turn{agent.turns === 1 ? "" : "s"}
@@ -759,7 +787,7 @@ function ToolTrace({ agent }: { agent: AgentRun }) {
         of{" "}
         <span className="font-mono text-slate-400">{agent.toolsOffered.join(", ")}</span>.
       </p>
-      <ol className="mt-2 flex flex-col gap-1.5">
+      <ol className="mt-3 flex flex-col gap-2">
         {agent.trace.map((call) => (
           <TraceRow key={call.step} call={call} />
         ))}
@@ -770,14 +798,14 @@ function ToolTrace({ agent }: { agent: AgentRun }) {
 
 function TraceRow({ call }: { call: ToolCallRecord }) {
   return (
-    <li className="rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-1.5">
+    <li className="rounded-lg bg-slate-950/50 px-3 py-2">
       <div className="flex items-baseline gap-2 font-mono text-[11px]">
-        <span className="text-slate-600">{call.step}</span>
+        <span className="tabular-nums text-slate-600">{call.step}</span>
         <span className={call.ok ? "text-teal-300" : "text-amber-300"}>{call.name}</span>
         <span className="min-w-0 flex-1 truncate text-slate-500">
           {JSON.stringify(call.arguments)}
         </span>
-        <span className="text-slate-600">{call.durationMs}ms</span>
+        <span className="tabular-nums text-slate-600">{call.durationMs}ms</span>
       </div>
       <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-slate-400">
         {JSON.stringify(call.result)}
@@ -785,6 +813,12 @@ function TraceRow({ call }: { call: ToolCallRecord }) {
     </li>
   );
 }
+
+const VIEW_DOCUMENT_TITLE: Record<View, string> = {
+  single: "One mutation · AMR Resistance Copilot",
+  triage: "Batch triage · AMR Resistance Copilot",
+  eval: "Eval · AMR Resistance Copilot",
+};
 
 const VIEW_BLURB: Record<View, string> = {
   single: "one mutation, measured and explained",
@@ -805,8 +839,8 @@ function ViewButton({
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-1.5 text-xs transition ${
-        active ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+      className={`px-3.5 py-2 text-sm transition ${
+        active ? "bg-slate-100 font-medium text-slate-900" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
       }`}
     >
       {children}
@@ -827,8 +861,8 @@ function ModeButton({
     <button
       type="button"
       onClick={onClick}
-      className={`px-2.5 py-1 text-xs transition ${
-        active ? "bg-teal-500 text-slate-950" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+      className={`px-3 py-1.5 text-sm transition ${
+        active ? "bg-teal-500 font-medium text-slate-950" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
       }`}
     >
       {children}
@@ -844,40 +878,46 @@ function Thinking({ mode }: { mode: Mode }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <p className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-      {mode === "agent"
-        ? "Measuring the structure, one tool call at a time…"
-        : "Reasoning over the measurements…"}{" "}
-      {seconds}s
-    </p>
+    <IndeterminateBar
+      label={
+        mode === "agent"
+          ? "Measuring the structure, one tool call at a time…"
+          : "Reasoning over the measurements…"
+      }
+      hint={
+        mode === "agent"
+          ? "Local model with a tool loop — typically around a minute."
+          : "Local qwen3:8b over the measurements already on this page."
+      }
+      elapsed={seconds}
+    />
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-0.5 leading-relaxed text-slate-300">{children}</p>
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm leading-relaxed text-slate-300">{children}</p>
     </div>
   );
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-      <p className="text-xs uppercase tracking-wide text-slate-400">{title}</p>
-      <div className="mt-2">{children}</div>
+    <div className="px-1 py-1">
+      <p className="font-display text-base text-slate-100">{title}</p>
+      <div className="mt-3">{children}</div>
     </div>
   );
 }
 
 function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-slate-800/70 py-1.5 last:border-0">
-      <span className="text-slate-400">{label}</span>
+    <div className="flex items-baseline justify-between gap-3 border-b border-slate-800/50 py-2 last:border-0">
+      <span className="text-sm text-slate-400">{label}</span>
       <span className="text-right">
-        <span className="font-mono text-slate-100">{value}</span>
+        <span className="font-mono tabular-nums text-slate-100">{value}</span>
         {note && <span className="ml-2 text-xs text-slate-500">{note}</span>}
       </span>
     </div>

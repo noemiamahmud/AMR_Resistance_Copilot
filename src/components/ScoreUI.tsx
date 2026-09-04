@@ -21,7 +21,7 @@ export const LIKELIHOOD_STYLES: Record<ResistanceLikelihood, string> = {
 export function CallBadge({ call }: { call: StructuralCall }) {
   return (
     <span
-      className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-medium ${CALL_STYLES[call]}`}
+      className={`whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-medium tracking-wide ${CALL_STYLES[call]}`}
     >
       {call}
     </span>
@@ -31,7 +31,7 @@ export function CallBadge({ call }: { call: StructuralCall }) {
 export function LikelihoodBadge({ likelihood }: { likelihood: ResistanceLikelihood }) {
   return (
     <span
-      className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-medium ${LIKELIHOOD_STYLES[likelihood]}`}
+      className={`whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-medium tracking-wide ${LIKELIHOOD_STYLES[likelihood]}`}
     >
       {likelihood}
     </span>
@@ -45,8 +45,8 @@ export function LikelihoodBadge({ likelihood }: { likelihood: ResistanceLikeliho
 export function ScoreBar({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-7 shrink-0 text-right font-mono text-xs text-slate-200">{score}</span>
-      <span className="relative h-1.5 min-w-[52px] flex-1 overflow-hidden rounded-full bg-slate-800">
+      <span className="w-7 shrink-0 text-right font-mono tabular-nums text-xs text-slate-200">{score}</span>
+      <span className="relative h-2 min-w-[52px] flex-1 overflow-hidden rounded-full bg-slate-800">
         <span
           className={`absolute inset-y-0 left-0 rounded-full ${
             score >= RESISTANT_AT_OR_ABOVE

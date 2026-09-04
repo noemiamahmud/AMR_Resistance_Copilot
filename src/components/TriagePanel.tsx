@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CallBadge, LikelihoodBadge, ScoreBar } from "@/components/ScoreUI";
+import { DeterminateBar } from "@/components/chrome";
 import type { ViewerFocus } from "@/components/StructureViewer";
 import { runPool } from "@/lib/pool";
 import type { MechanisticReasoning } from "@/lib/reasoning";
@@ -152,16 +153,20 @@ export default function TriagePanel({
       ligandPoseFile: t.ligandPoseFile,
       ligandCode: t.ligandCode,
       drug: t.drug,
+      gene: t.gene,
+      proteinName: t.proteinName,
+      uniprotAccession: t.uniprotAccession,
+      pdbId: t.complexPdbId,
     });
   };
 
   const lineCount = text.split("\n").filter((l) => l.trim()).length;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8">
       <div>
-        <h2 className="text-sm font-medium text-slate-200">Surveillance batch triage</h2>
-        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+        <h2 className="font-display text-xl font-semibold text-slate-50">Surveillance batch triage</h2>
+        <p className="mt-2 text-sm leading-relaxed text-slate-400">
           A sequenced isolate is a list of mutations, not one. Every row is measured against the
           same structure and ranked by the structural score — and within a risk band, the
           mutations the catalogue has never recorded come first, because those are the ones
@@ -170,7 +175,7 @@ export default function TriagePanel({
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="isolate" className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <label htmlFor="isolate" className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
           Isolate mutations — one per line
         </label>
         <textarea
@@ -179,29 +184,30 @@ export default function TriagePanel({
           onChange={(e) => setText(e.target.value)}
           rows={7}
           spellCheck={false}
-          className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-500"
+          className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 font-mono text-xs leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-400"
         />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={() => void triage()}
             disabled={busy}
-            className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
+            className="rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
           >
             {busy ? "Triaging…" : `Triage ${lineCount} mutation${lineCount === 1 ? "" : "s"}`}
           </button>
           <button
             type="button"
             onClick={() => setText(isolateFor(targetId))}
-            className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+            className="rounded-md border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
           >
             Reset to the demo isolate
           </button>
           {reasoningTotal > 0 && reasoningDone < reasoningTotal && (
-            <span className="flex items-center gap-1.5 text-xs text-slate-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-              mechanisms {reasoningDone}/{reasoningTotal}
-            </span>
+            <DeterminateBar
+              done={reasoningDone}
+              total={reasoningTotal}
+              label="mechanisms"
+            />
           )}
         </div>
       </div>
@@ -215,10 +221,10 @@ export default function TriagePanel({
       {result && (
         <>
           <Summary result={result} />
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <div className="max-h-[min(70vh,44rem)] overflow-auto rounded-xl border border-slate-800/90">
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-900/60 text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <tr className="sticky top-0 z-10 border-b-2 border-slate-700 bg-slate-900/95 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300 backdrop-blur">
                   <Th className="w-10">#</Th>
                   <Th>Mutation</Th>
                   <Th className="w-40">Structural score</Th>
@@ -252,8 +258,8 @@ export default function TriagePanel({
             </table>
           </div>
 
-          <details className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-            <summary className="cursor-pointer text-xs uppercase tracking-wide text-slate-400">
+          <details className="px-1">
+            <summary className="cursor-pointer text-xs uppercase tracking-[0.14em] text-slate-500">
               How the ranking is computed
             </summary>
             <ul className="mt-2 space-y-1 text-xs leading-relaxed text-slate-500">
@@ -280,19 +286,19 @@ export default function TriagePanel({
 function Summary({ result }: { result: TriageResult }) {
   const { summary } = result;
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-400">
+    <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-400">
         <span>
-          <span className="font-mono text-slate-200">{result.analysed}</span> analysed
+          <span className="font-mono tabular-nums text-slate-200">{result.analysed}</span> analysed
         </span>
         <span>
-          <span className="font-mono text-red-300">{summary.likelyResistant}</span> likely resistant
+          <span className="font-mono tabular-nums text-red-300">{summary.likelyResistant}</span> likely resistant
         </span>
         <span>
-          <span className="font-mono text-amber-300">{summary.uncertain}</span> uncertain
+          <span className="font-mono tabular-nums text-amber-300">{summary.uncertain}</span> uncertain
         </span>
         <span>
-          <span className="font-mono text-emerald-300">{summary.likelyNeutral}</span> likely neutral
+          <span className="font-mono tabular-nums text-emerald-300">{summary.likelyNeutral}</span> likely neutral
         </span>
         {summary.noCall > 0 && (
           <span>
@@ -313,7 +319,7 @@ function Summary({ result }: { result: TriageResult }) {
       </div>
 
       {summary.novelHighRisk.length > 0 && (
-        <p className="mt-2.5 rounded-lg border border-fuchsia-800 bg-fuchsia-950/30 px-3 py-2 text-xs leading-relaxed text-fuchsia-200">
+        <p className="mt-3 rounded-lg border border-fuchsia-800/70 bg-fuchsia-950/30 px-4 py-2.5 text-sm leading-relaxed text-fuchsia-200">
           <span className="font-medium">
             {summary.novelHighRisk.length} high-risk mutation
             {summary.novelHighRisk.length === 1 ? "" : "s"} the catalogue has never seen:{" "}
@@ -350,8 +356,8 @@ function Row({
 }) {
   if (row.error) {
     return (
-      <tr className="border-b border-slate-800/70 last:border-0">
-        <Td className="text-slate-600">{row.rank}</Td>
+      <tr className="border-b border-slate-800/50 last:border-0 even:bg-slate-800/25">
+        <Td className="font-mono tabular-nums text-slate-600">{row.rank}</Td>
         <Td className="font-mono text-slate-400">{row.input}</Td>
         <Td colSpan={5} className="text-xs text-amber-400/90">
           {row.error}
@@ -366,11 +372,11 @@ function Row({
     <>
       <tr
         onClick={onSelect}
-        className={`cursor-pointer border-b border-slate-800/70 transition last:border-0 ${
-          selected ? "bg-slate-800/60" : "hover:bg-slate-900/60"
+        className={`cursor-pointer border-b border-slate-800/50 transition last:border-0 ${
+          selected ? "bg-slate-800/55" : "even:bg-slate-800/25 hover:bg-slate-800/40"
         }`}
       >
-        <Td className="text-slate-600">{row.rank}</Td>
+        <Td className="font-mono tabular-nums text-slate-600">{row.rank}</Td>
         <Td>
           <div className="flex items-center gap-2">
             <span className="font-mono text-slate-100">{row.canonical}</span>
@@ -393,7 +399,7 @@ function Row({
         <Td>
           <CallBadge call={row.score!.call} />
         </Td>
-        <Td className="font-mono text-xs text-slate-300">
+        <Td className="font-mono tabular-nums text-xs text-slate-300">
           {row.minDistanceToDrugAngstroms} Å
           <span className="block text-[10px] text-slate-500">{row.proximity}</span>
         </Td>
@@ -429,11 +435,11 @@ function Row({
         </Td>
       </tr>
       {expanded && answer && (
-        <tr className="border-b border-slate-800/70 bg-slate-950/50 last:border-0">
+        <tr className="border-b border-slate-800/50 bg-slate-950/50 last:border-0">
           <td />
-          <td colSpan={6} className="px-3 py-2.5">
-            <p className="text-xs leading-relaxed text-slate-300">{answer.mechanismHypothesis}</p>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+          <td colSpan={6} className="px-3 py-3">
+            <p className="text-sm leading-relaxed text-slate-300">{answer.mechanismHypothesis}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
               {answer.confidenceCaveat}
             </p>
           </td>
@@ -444,7 +450,7 @@ function Row({
 }
 
 function Th({ children, className = "" }: { children?: React.ReactNode; className?: string }) {
-  return <th className={`px-3 py-2 font-medium ${className}`}>{children}</th>;
+  return <th className={`px-3 py-2.5 font-semibold ${className}`}>{children}</th>;
 }
 
 function Td({
