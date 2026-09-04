@@ -8,7 +8,17 @@ genomic surveillance turns up novel mutations constantly. This tool reasons from
 target's 3D structure instead, so it can make a mechanistic call on a mutation no
 database recognises, and explain the reasoning.
 
-**Flagship target:** *Mycobacterium tuberculosis* RpoB + rifampicin.
+**Targets bundled:** three *M. tuberculosis* drug targets, selectable in the UI.
+
+| Gene + drug | Structure | Drug pose from | Numbering offset |
+|---|---|---|---|
+| `rpoB` + rifampicin | AlphaFold P9WGY9 | PDB 5UHC (RFP), 0.79 Å | **+6** |
+| `gyrA` + moxifloxacin | AlphaFold P9WG47 | PDB 5BS8 (MFX), 0.52 Å | 0 |
+| `inhA` + isoniazid | AlphaFold P9WGR1 | PDB 1ZID (ZID), 1.59 Å | 0 |
+
+Every one uses a **real drug-bound complex** superposed onto the model, not an inferred
+pocket. For inhA the ligand is the isonicotinic-acyl-NAD adduct, because isoniazid is a
+prodrug and the parent compound never occupies the site.
 
 ## Status
 
@@ -370,6 +380,34 @@ This predicts a quantity, which is a far stronger claim, and on this evidence it
 support it. Reporting the noisy first pair as a 2× affinity drop would have been the easiest
 and least honest thing in the whole project.
 
+## Adding a target
+
+`scripts/targets.json` is the single source of truth, read by both the Python builder and
+the app, so the two cannot end up describing different structures. Adding a target is a
+manifest entry plus one command — no application code changes:
+
+```bash
+python3 scripts/build_target.py <target-id>     # or --all
+```
+
+You need: a UniProt accession with an AlphaFold model, a PDB entry with the drug actually
+bound, the chain that drug sits on, and a CARD ARO accession for the gene.
+
+The builder verifies rather than trusts, because each of these is a way to be silently and
+plausibly wrong:
+
+- **The numbering offset is re-derived from the catalogue**, by finding the shift that makes
+  every catalogued wild-type residue agree with the AlphaFold sequence. If the manifest
+  disagrees with the data, the build stops.
+- **The crystal chain is checked residue by residue** against the AlphaFold sequence before
+  superposing (99.8% for gyrA, 99.6% for inhA). Superposing the wrong chain still produces a
+  rotation matrix and a plausible-looking pose.
+- **Catalogue entries whose wild-type residue contradicts the structure are dropped and
+  recorded** in the output file. Two gyrA entries, D472H and D500N, fail this.
+- **The right ligand copy is chosen.** 5BS8 holds two moxifloxacins, both assigned to DNA
+  chains because the drug intercalates. Keeping both would put phantom density beside the
+  monomer and shrink every distance downstream.
+
 ## The numbering trap
 
 CARD and the WHO catalogue number rpoB against **NP_215181.1 (1172 aa)**. UniProt
@@ -396,6 +434,11 @@ across all 1171 shared residues.
 | `public/data/card-rpob-rifampicin.json` | CARD `snps.txt`, ARO:3003283 — 157 substitutions |
 | `public/data/golden-set.json` | Hand-labelled eval set: 5 CARD/WHO resistant, 5 proxy-neutral, 1 declared failure |
 | `public/data/affinity-cache.json` | 5+5 real Boltz-2 NIM runs, wild type vs S450L (nothing synthetic) |
+| `public/data/structures/gyra.pdb` | AlphaFold DB `AF-P9WG47-F1-model_v6.pdb` |
+| `public/data/structures/inha.pdb` | AlphaFold DB `AF-P9WGR1-F1-model_v6.pdb` |
+| `public/data/moxifloxacin-pose.pdb` | PDB 5BS8 ligand MFX, superposed onto the AlphaFold model |
+| `public/data/isoniazid-nad-pose.pdb` | PDB 1ZID ligand ZID, superposed onto the AlphaFold model |
+| `public/data/card-gyra-*.json`, `card-inha-*.json` | CARD `snps.txt`, ARO:3003295 and ARO:3003393 |
 
 See [scripts/README.md](scripts/README.md) to regenerate any of these from primary sources.
 
@@ -415,6 +458,12 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
   anything measured here.
 - "Novel" means absent from the bundled CARD export, which is a snapshot. It does not
   mean absent from the literature.
+- Only rpoB has a hand-labelled golden set, so the eval scores that target alone. The
+  measurements and ranking work identically on gyrA and inhA; what is missing there is the
+  evidence that the score is right, and the eval view says so rather than showing a number.
+- gyrA's measured pocket is only three residues, because moxifloxacin is largely intercalated
+  into DNA and touches little of the protein directly. The distances are still real, but
+  "contact with the drug" means something narrower here than it does for rpoB.
 - The Boltz-2 affinity comparison is a **predicted** quantity and, as run here, does not
   resolve S450L from wild type. Treat it as a demonstration of the method and of how to
   report a null result, not as a resistance readout.
@@ -429,6 +478,70 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
   per row one at a time at roughly 13 s each, so the eight-mutation demo isolate takes a
   little under two minutes to finish filling in. The ranking itself is instant and needs no
   model.
+
+## Deploying this publicly
+
+The blocker is not the web app — it is the **local model**. Everything else is static files
+and CPU-bound arithmetic that will run anywhere.
+
+### What each piece needs
+
+| Piece | Hosted? | Notes |
+|---|---|---|
+| Next.js app, all structural maths | Yes, anywhere | Pure CPU, no state, no database |
+| Bundled data (~2 MB) | Yes | Committed to the repo, served from `public/` |
+| `qwen3:8b` via Ollama | **No** | Expects `localhost:11434`. This is the work |
+| Boltz-2 affinity | Already remote | Needs `NVIDIA_API_KEY` as a server-side secret |
+| 3Dmol.js | CDN | Nothing to do |
+
+### The decision you have to make about the model
+
+Pick one:
+
+1. **Ship it model-free.** Deploy as is with no `OLLAMA_HOST` reachable. The structural
+   measurements, catalogue flag, triage ranking, eval and cached affinity all still work —
+   only the written hypothesis and the agent trace go missing, and the UI already says so.
+   Zero cost, zero ops, and honestly a reasonable public demo.
+2. **Point it at a hosted OpenAI-compatible endpoint.** `src/lib/ollama.ts` is ~200 lines and
+   already speaks a chat API with tool calls and JSON-schema output. Swapping the base URL and
+   adding an auth header is the smallest real change. Anything serving Qwen3 or similar works.
+   This costs per token and adds a key to protect.
+3. **Run Ollama on a GPU box** and set `OLLAMA_HOST` to it. Closest to the current behaviour,
+   most ops. Do not expose Ollama publicly — it has no auth.
+
+### Concretely, to get it live
+
+```bash
+# 1. Any Node host works. Vercel is the least effort:
+npx vercel            # first deploy
+npx vercel --prod     # promote
+```
+
+Then, in the host's dashboard, set the env vars you need — `OLLAMA_HOST`, `OLLAMA_MODEL`,
+`NVIDIA_API_KEY`. **Never commit `.env.local`**; it is already gitignored.
+
+Things that will bite you, in the order they will bite you:
+
+- **Serverless timeouts.** `/api/affinity` declares `maxDuration = 800`, which most
+  free tiers will not honour (Vercel Hobby caps at 60 s). A live Boltz run is ~4 minutes and
+  will be killed. The cached comparison is unaffected — it returns in ~100 ms — so either
+  hide the live button in production or deploy that route somewhere with longer limits.
+- **A slow LLM route.** `/api/agent` takes ~60 s and `/api/reason` ~15 s. Both exceed short
+  function timeouts. If you go with option 1 this is moot.
+- **Rate limiting and cost.** Right now anyone hitting your deployment can spend your NVIDIA
+  quota and your token budget. Add rate limiting before sharing the link publicly. There is
+  currently **no authentication and no rate limiting** in this app.
+- **Node runtime, not edge.** The API routes use `fs` to read bundled files, so they must run
+  on the Node runtime. The default is correct; do not set `export const runtime = "edge"`.
+- **Cold starts** re-read and re-parse the structure on the first request per instance (the
+  cache in `lib/analysis.ts` is per-process). First hit is a second or two.
+
+### What is safe to expose
+
+No user data is stored, there is no database, and nothing is written at runtime. The only
+secret is `NVIDIA_API_KEY`, which is read server-side in `src/lib/boltz.ts`, sent only to
+NVIDIA, and never reaches the browser. The main risk of a public deployment is cost, not
+disclosure — see rate limiting above.
 
 ## Stack
 
