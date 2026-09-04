@@ -216,10 +216,12 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
         )}
       </div>
       {ready && !error && (
-        <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-slate-800/90 bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-800/90 bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
+          <Legend color="#1e2a4a" label="rest of chain" />
           <Legend color="#ef4444" label="mutated residue" />
           <Legend color="#2dd4bf" label={`${focus?.drug ?? "drug"}-contact residues`} />
-          <Legend color="#eab308" label={focus?.drug ?? "drug"} />
+          <Legend color="#eab308" label={`${focus?.drug ?? "drug"} carbon`} />
+          <Legend color="#3050F8" label="nitrogen in the drug" />
         </div>
       )}
     </div>
@@ -229,7 +231,10 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
 function Legend({ color, label }: { color: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+      <span
+        className="h-2.5 w-2.5 rounded-full ring-1 ring-white/25"
+        style={{ backgroundColor: color }}
+      />
       {label}
     </span>
   );
