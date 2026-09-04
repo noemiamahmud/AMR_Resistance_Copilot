@@ -31,6 +31,8 @@ export interface TargetDefinition {
   ligandSource: string;
   pocketFile: string;
   catalogueFile: string;
+  /** Hand-labelled ground truth for the Phase 6 eval. */
+  goldenSetFile: string;
 }
 
 export const RPOB_RIFAMPICIN: TargetDefinition = {
@@ -52,6 +54,7 @@ export const RPOB_RIFAMPICIN: TargetDefinition = {
   ligandSource: "PDB 5UHC ligand RFP, superposed onto the AlphaFold model (0.79 Å RMSD over 575 Cα atoms)",
   pocketFile: "data/pocket-rpob-rifampicin.json",
   catalogueFile: "data/card-rpob-rifampicin.json",
+  goldenSetFile: "data/golden-set.json",
 };
 
 export const TARGETS: TargetDefinition[] = [RPOB_RIFAMPICIN];

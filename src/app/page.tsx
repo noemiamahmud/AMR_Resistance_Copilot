@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import EvalPanel from "@/components/EvalPanel";
 import StructureViewer, { ViewerFocus } from "@/components/StructureViewer";
+import TriagePanel from "@/components/TriagePanel";
 import type { AgentRun, ToolCallRecord } from "@/lib/agent";
 import type { AnalysisResult, CatalogueVerdict } from "@/lib/analysis";
 import type { MechanisticReasoning, ResistanceLikelihood } from "@/lib/reasoning";
+import { ordinal } from "@/lib/score";
 
 /**
  * Two ways of asking the same question. The pipeline hands the model a finished feature
@@ -14,6 +17,13 @@ import type { MechanisticReasoning, ResistanceLikelihood } from "@/lib/reasoning
  * path and stays the default - the agent costs five or six model round trips.
  */
 type Mode = "pipeline" | "agent";
+
+/**
+ * Three views over the same bundled structure and the same measurements. One mutation is
+ * the explanation; an isolate is the workflow an analyst actually has; the eval is the
+ * evidence that the ranking in the middle view means anything.
+ */
+type View = "single" | "triage" | "eval";
 
 const HERO_MUTATION = "rpoB S450L";
 /**
@@ -43,6 +53,9 @@ export default function Home() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [view, setView] = useState<View>("single");
+  const [triageFocus, setTriageFocus] = useState<ViewerFocus | null>(null);
 
   const [mode, setMode] = useState<Mode>("pipeline");
   const [reasoning, setReasoning] = useState<MechanisticReasoning | null>(null);
@@ -148,113 +161,158 @@ export default function Home() {
       }
     : null;
 
-  return (
-    <main className="mx-auto grid min-h-screen max-w-[1500px] grid-cols-1 gap-6 p-6 lg:grid-cols-[440px_1fr]">
-      <section className="flex flex-col gap-5">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-100">
-            AMR Resistance Copilot
-          </h1>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-400">
-            Structure-grounded interpretation of antimicrobial-resistance mutations. Locates the
-            mutation on the drug target and measures its relationship to the drug-binding site —
-            including for mutations no catalogue has seen.
-          </p>
-        </header>
+  const viewerFocus = view === "triage" ? (triageFocus ?? focus) : focus;
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void analyse(input);
-          }}
-          className="flex flex-col gap-3"
-        >
-          <label htmlFor="mutation" className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            Gene and mutation
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="mutation"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="rpoB S450L"
-              spellCheck={false}
-              className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-500"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
-            >
-              {busy ? "Analysing…" : "Analyse"}
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setInput(HERO_MUTATION);
-                void analyse(HERO_MUTATION);
-              }}
-              className="rounded-md border border-teal-700 bg-teal-950/60 px-2.5 py-1 text-xs text-teal-300 transition hover:bg-teal-900/60"
-            >
-              ▶ Demo: {HERO_MUTATION}
-            </button>
-            {EXAMPLES.slice(1).map((ex) => (
+  return (
+    <main className="mx-auto min-h-screen max-w-[1500px] p-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-100">
+          AMR Resistance Copilot
+        </h1>
+        <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-slate-400">
+          Structure-grounded interpretation of antimicrobial-resistance mutations. Locates the
+          mutation on the drug target and measures its relationship to the drug-binding site —
+          including for mutations no catalogue has seen.
+        </p>
+      </header>
+
+      <nav className="mt-5 flex flex-wrap items-center gap-2">
+        <div className="flex overflow-hidden rounded-lg border border-slate-700">
+          <ViewButton active={view === "single"} onClick={() => setView("single")}>
+            One mutation
+          </ViewButton>
+          <ViewButton active={view === "triage"} onClick={() => setView("triage")}>
+            Batch triage
+          </ViewButton>
+          <ViewButton active={view === "eval"} onClick={() => setView("eval")}>
+            Eval
+          </ViewButton>
+        </div>
+        <span className="text-xs text-slate-500">{VIEW_BLURB[view]}</span>
+      </nav>
+
+      {/* Both working views stay mounted. Switching to the eval and back during a demo must
+          not discard a triage table whose mechanisms took a minute of local inference to
+          fill in, and it keeps the viewer from re-parsing the structure on every switch. */}
+      <div
+        className={`mt-6 grid-cols-1 gap-6 ${view === "eval" ? "hidden" : "grid"} ${
+          view === "single" ? "lg:grid-cols-[440px_1fr]" : "lg:grid-cols-[minmax(0,1fr)_430px]"
+        }`}
+      >
+        <section className={view === "triage" ? "min-w-0" : "hidden"}>
+          <TriagePanel
+            modelAvailable={health ? health.available && health.modelPresent : true}
+            onSelect={setTriageFocus}
+            onOpenSingle={(mutation) => {
+              setInput(mutation);
+              setView("single");
+              void analyse(mutation);
+            }}
+          />
+        </section>
+
+        <section className={view === "single" ? "flex flex-col gap-5" : "hidden"}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void analyse(input);
+            }}
+            className="flex flex-col gap-3"
+          >
+            <label htmlFor="mutation" className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              Gene and mutation
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="mutation"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="rpoB S450L"
+                spellCheck={false}
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-500"
+              />
               <button
-                key={ex}
+                type="submit"
+                disabled={busy}
+                className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
+              >
+                {busy ? "Analysing…" : "Analyse"}
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
                 type="button"
                 onClick={() => {
-                  setInput(ex);
-                  void analyse(ex);
+                  setInput(HERO_MUTATION);
+                  void analyse(HERO_MUTATION);
                 }}
-                className="rounded-md border border-slate-700 px-2.5 py-1 font-mono text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                className="rounded-md border border-teal-700 bg-teal-950/60 px-2.5 py-1 text-xs text-teal-300 transition hover:bg-teal-900/60"
               >
-                {ex}
+                ▶ Demo: {HERO_MUTATION}
               </button>
-            ))}
+              {EXAMPLES.slice(1).map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => {
+                    setInput(ex);
+                    void analyse(ex);
+                  }}
+                  className="rounded-md border border-slate-700 px-2.5 py-1 font-mono text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </form>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-slate-500">Reasoning</span>
+            <div className="flex overflow-hidden rounded-lg border border-slate-700">
+              <ModeButton active={mode === "pipeline"} onClick={() => switchMode("pipeline")}>
+                Pipeline
+              </ModeButton>
+              <ModeButton active={mode === "agent"} onClick={() => switchMode("agent")}>
+                Agent + tool trace
+              </ModeButton>
+            </div>
+            <span className="text-xs text-slate-500">
+              {mode === "pipeline"
+                ? "one call over precomputed features"
+                : "the model measures the structure itself · ~1 min"}
+            </span>
           </div>
-        </form>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-slate-500">Reasoning</span>
-          <div className="flex overflow-hidden rounded-lg border border-slate-700">
-            <ModeButton active={mode === "pipeline"} onClick={() => switchMode("pipeline")}>
-              Pipeline
-            </ModeButton>
-            <ModeButton active={mode === "agent"} onClick={() => switchMode("agent")}>
-              Agent + tool trace
-            </ModeButton>
-          </div>
-          <span className="text-xs text-slate-500">
-            {mode === "pipeline"
-              ? "one call over precomputed features"
-              : "the model measures the structure itself · ~1 min"}
-          </span>
-        </div>
+          {error && (
+            <p className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300">
+              {error}
+            </p>
+          )}
 
-        {error && (
-          <p className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300">
-            {error}
-          </p>
-        )}
+          {result && (
+            <ResultPanel
+              result={result}
+              mode={mode}
+              reasoning={reasoning}
+              agent={agent}
+              reasoningBusy={reasoningBusy}
+              reasoningError={reasoningError}
+              health={health}
+            />
+          )}
+        </section>
 
-        {result && (
-          <ResultPanel
-            result={result}
-            mode={mode}
-            reasoning={reasoning}
-            agent={agent}
-            reasoningBusy={reasoningBusy}
-            reasoningError={reasoningError}
-            health={health}
-          />
-        )}
-      </section>
+        <section className="min-h-[520px] lg:sticky lg:top-6 lg:h-[calc(100vh-13rem)]">
+          <StructureViewer focus={viewerFocus} />
+        </section>
+      </div>
 
-      <section className="min-h-[520px] lg:h-[calc(100vh-3rem)] lg:sticky lg:top-6">
-        <StructureViewer focus={focus} />
-      </section>
+      {/* Mounted alongside the others, for the same reason: scoring the model over the golden
+          set costs a couple of minutes of local inference, and switching tabs to point at the
+          structure must not throw it away. It also makes the tab open instantly. */}
+      <div className={view === "eval" ? "mt-6" : "hidden"}>
+        <EvalPanel />
+      </div>
     </main>
   );
 }
@@ -327,7 +385,7 @@ function ResultPanel({
         <Metric
           label="Burial"
           value={`${structure.burial.neighborCount} neighbours`}
-          note={`${structure.burial.band}, ${structure.burial.percentile}th percentile`}
+          note={`${structure.burial.band}, ${ordinal(structure.burial.percentile)} percentile`}
         />
         {structure.drug.nearestPocketResidue && (
           <Metric
@@ -615,6 +673,34 @@ function TraceRow({ call }: { call: ToolCallRecord }) {
         {JSON.stringify(call.result)}
       </pre>
     </li>
+  );
+}
+
+const VIEW_BLURB: Record<View, string> = {
+  single: "one mutation, measured and explained",
+  triage: "a whole isolate, ranked",
+  eval: "does the ranking hold up against labelled ground truth",
+};
+
+function ViewButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 text-xs transition ${
+        active ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
