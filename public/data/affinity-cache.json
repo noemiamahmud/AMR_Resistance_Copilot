@@ -1,0 +1,94 @@
+{
+  "generatedIso": "2026-09-03T00:00:00.000Z",
+  "note": "Pre-baked so a demo never waits on a rate-limited cloud GPU. Every number here came from a real Boltz-2 NIM run; nothing is synthetic. Regenerate with scripts/make_affinity_cache.mjs.",
+  "ligand": {
+    "name": "rifampicin",
+    "smiles": "Cc1c(c2c3c4c1O[C@@](C4=O)(O\\C=C\\[C@@H]([C@H]([C@H]([C@@H]([C@@H]([C@@H]([C@H]([C@H](C=C\\C=C(/C(=O)Nc(c2O)c(c3O)\\C=N\\N5CCN(CC5)C)\\C)C)O)C)O)C)OC(=O)C)C)OC)C)O",
+    "source": "RCSB chemical component RFP - the same ligand deposited in 5UHC, whose pose the structural pipeline already measures against"
+  },
+  "method": {
+    "model": "Boltz-2 (mit/boltz2 NIM)",
+    "endpoint": "health.api.nvidia.com/v1/biology/mit/boltz2/predict",
+    "sequenceLength": 1178,
+    "msa": "none (single sequence)",
+    "settings": "recycling_steps 3, sampling_steps 50, diffusion_samples 1, sampling_steps_affinity 200, diffusion_samples_affinity 5. Wild-type and mutant requests interleaved."
+  },
+  "runs": {
+    "S450L": {
+      "wildType": [
+        {
+          "affinityLog10IC50Micromolar": 0.043212890625,
+          "bindingProbability": 0.640625,
+          "confidence": 0.4775230884552002,
+          "complexPlddt": 0.4489540755748749,
+          "ligandIptm": 0.5917991995811462
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.228515625,
+          "bindingProbability": 0.63671875,
+          "confidence": 0.4811531603336334,
+          "complexPlddt": 0.44904160499572754,
+          "ligandIptm": 0.6095994114875793
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.41015625,
+          "bindingProbability": 0.66015625,
+          "confidence": 0.5080329775810242,
+          "complexPlddt": 0.48265373706817627,
+          "ligandIptm": 0.6095501184463501
+        },
+        {
+          "affinityLog10IC50Micromolar": 0.095703125,
+          "bindingProbability": 0.6328125,
+          "confidence": 0.49804002046585083,
+          "complexPlddt": 0.4613052010536194,
+          "ligandIptm": 0.6449792385101318
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.236328125,
+          "bindingProbability": 0.6484375,
+          "confidence": 0.4877167344093323,
+          "complexPlddt": 0.45500025153160095,
+          "ligandIptm": 0.6185826063156128
+        }
+      ],
+      "mutant": [
+        {
+          "affinityLog10IC50Micromolar": -0.25,
+          "bindingProbability": 0.59375,
+          "confidence": 0.46796998381614685,
+          "complexPlddt": 0.4589490592479706,
+          "ligandIptm": 0.5040538311004639
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.0478515625,
+          "bindingProbability": 0.609375,
+          "confidence": 0.45519065856933594,
+          "complexPlddt": 0.44026750326156616,
+          "ligandIptm": 0.514883279800415
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.275390625,
+          "bindingProbability": 0.63671875,
+          "confidence": 0.4516885280609131,
+          "complexPlddt": 0.43191033601760864,
+          "ligandIptm": 0.5308012366294861
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.37109375,
+          "bindingProbability": 0.59375,
+          "confidence": 0.5022785663604736,
+          "complexPlddt": 0.4698168635368347,
+          "ligandIptm": 0.6321253180503845
+        },
+        {
+          "affinityLog10IC50Micromolar": -0.3046875,
+          "bindingProbability": 0.63671875,
+          "confidence": 0.479875385761261,
+          "complexPlddt": 0.45388203859329224,
+          "ligandIptm": 0.5838485956192017
+        }
+      ]
+    }
+  }
+}

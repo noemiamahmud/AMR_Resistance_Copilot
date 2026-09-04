@@ -22,6 +22,24 @@ python3 scripts/make_ligand_pose.py /tmp/5uhc.cif public/hero.pdb public/data/ri
 python3 scripts/make_catalogue.py   /tmp/card public/data/card-rpob-rifampicin.json
 ```
 
+## Affinity cache (stretch)
+
+`public/data/affinity-cache.json` holds real Boltz-2 NIM runs so the app can show a
+wild-type-versus-mutant affinity comparison instantly rather than waiting on a
+rate-limited cloud GPU. It needs an NVIDIA API key and takes roughly a minute per
+replicate pair.
+
+```bash
+NVIDIA_API_KEY=nvapi-... node scripts/make_affinity_cache.mjs S450L 5
+```
+
+The replicates are not optional padding. Boltz-2's diffusion is stochastic, and repeated
+runs of the *identical* wild-type sequence span about half a log unit — wider than the
+wild-type/mutant difference being looked for. One run of each arm produces a confident
+number pointing in an arbitrary direction, so the script always runs several and the app
+reports the difference against that spread. Nothing in the cache may be synthetic; if a
+number in it did not come back from the API, the panel it feeds is a lie.
+
 ## The numbering trap
 
 CARD and the WHO catalogue number rpoB against **NP_215181.1 (1172 aa)**. UniProt

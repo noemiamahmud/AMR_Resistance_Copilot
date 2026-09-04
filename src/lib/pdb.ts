@@ -106,3 +106,30 @@ export function sideChainCentre(residue: Residue): Atom | undefined {
     residue.atoms.find((a) => a.name === "CA")
   );
 }
+
+/**
+ * One-letter sequence in residue-number order, for the residue range actually modelled.
+ * Boltz needs a sequence rather than coordinates, and taking it from the same structure
+ * the rest of the app measures keeps the numbering trap in one place.
+ */
+export function sequenceOf(
+  structure: ParsedStructure,
+  threeToOne: Record<string, string>,
+): { sequence: string; firstResSeq: number; lastResSeq: number; gaps: number[] } {
+  const numbers = [...structure.residues.keys()].sort((a, b) => a - b);
+  if (numbers.length === 0) return { sequence: "", firstResSeq: 0, lastResSeq: 0, gaps: [] };
+
+  const first = numbers[0];
+  const last = numbers[numbers.length - 1];
+  const gaps: number[] = [];
+  let sequence = "";
+  for (let i = first; i <= last; i++) {
+    const residue = structure.residues.get(i);
+    if (!residue) {
+      gaps.push(i);
+      continue;
+    }
+    sequence += threeToOne[residue.resName] ?? "X";
+  }
+  return { sequence, firstResSeq: first, lastResSeq: last, gaps };
+}

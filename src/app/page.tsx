@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import AffinityPanel from "@/components/AffinityPanel";
 import EvalPanel from "@/components/EvalPanel";
 import StructureViewer, { ViewerFocus } from "@/components/StructureViewer";
 import TriagePanel from "@/components/TriagePanel";
@@ -366,6 +367,9 @@ function ResultPanel({
         catalogue={catalogue}
         drug={structure.drug}
       />
+
+      {/* The stretch. Everything above is measured; this one predicts, and says so. */}
+      <AffinityPanel mutation={result.input.canonical} />
 
       <Card title="Measured from coordinates">
         <Metric

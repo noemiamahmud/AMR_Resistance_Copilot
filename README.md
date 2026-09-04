@@ -12,8 +12,8 @@ database recognises, and explain the reasoning.
 
 ## Status
 
-Phase 6 complete — mutation → structure → mechanism → catalogue flag → agent + tool trace →
-batch triage → eval.
+All phases complete, including the stretch — mutation → structure → mechanism → catalogue
+flag → agent + tool trace → batch triage → eval → predicted affinity.
 
 The app has three views, sharing one structure, one set of measurements and one score.
 
@@ -32,9 +32,14 @@ The app has three views, sharing one structure, one set of measurements and one 
   structural score, with the mutations no catalogue has recorded surfaced first.
 - Scores itself against a hand-labelled golden set — separation, generalization past the
   catalogue, and a declared failure case — with the caveats printed next to the numbers.
+- Co-folds RpoB with rifampicin through **Boltz-2** and compares predicted wild-type versus
+  mutant affinity — the one part that predicts rather than measures, and the one that
+  returns a negative result. See [the stretch](#the-stretch-a-predicted-affinity-and-a-negative-result).
 
-Everything on this path runs from bundled local files and a model on the same machine —
-no network call is made at request time, and no API key exists to leak.
+Everything except the stretch runs from bundled local files and a model on the same
+machine — no network call at request time, and no API key. The Boltz-2 comparison is the
+single exception: it is optional, server-side, and served from a pre-baked cache unless you
+explicitly ask for a live run.
 
 ## Run it
 
@@ -57,6 +62,9 @@ tool trace.
 `OLLAMA_HOST` (default `http://localhost:11434`) and `OLLAMA_MODEL` (default `qwen3:8b`)
 override the defaults. With no model reachable the structural analysis still runs in
 full; only the hypothesis panel reports itself unavailable.
+
+`NVIDIA_API_KEY` in `.env.local` is optional and only enables *live* Boltz-2 re-runs. The
+cached affinity comparison ships in the repo and renders without any key.
 
 ## What is actually being measured
 
@@ -290,6 +298,78 @@ scored: it may call `catalogue_lookup`, so on a catalogued mutation it can read 
 and a method that can see the labels cannot be evaluated against them. The pipeline never
 sees the catalogue, which is exactly what makes it scorable.
 
+## The stretch: a predicted affinity, and a negative result
+
+The plan's stretch was to quantify the resistance instead of inferring it: send the
+wild-type and mutant sequences plus rifampicin's SMILES to **Boltz-2**, which co-folds
+protein and ligand and predicts a binding affinity, then show the affinity drop.
+
+It is built and it runs against the real [`mit/boltz2`
+NIM](https://build.nvidia.com/mit/boltz2). **There is no affinity drop.**
+
+```
+wild type   -0.15 ± 0.21   (n = 5)
+mutant      -0.25 ± 0.12   (n = 5)
+Δ           -0.10 log10 IC50,  ± 0.11 SE,  0.9σ
+```
+
+Boltz-2 does not separate wild-type RpoB from S450L. The difference is a tenth of a log
+unit against a standard error of the same size, and it points the *wrong way* — slightly
+tighter in the mutant, where resistance predicts weaker. The panel says so.
+
+### Why this is reported as five runs and not one
+
+Boltz-2's structure module is a diffusion model, so it is stochastic: repeated requests for
+the *identical* wild-type sequence came back spanning half a log unit. That is wider than
+the wild-type-versus-mutant effect being looked for, which makes a single pair of runs
+worthless — and worse than worthless, because it still produces a confident-looking number.
+
+Across the 25 ways of pairing these ten runs, a single wild-type/mutant comparison would
+have reported anything from 0.34× tighter to 2.30× weaker. Seven of the 25 point the way
+resistance predicts; eighteen point the other way.
+
+The first pair actually run during development came out at **+0.31 log units, "the mutant
+binds 2.0× more weakly"** — exactly the headline the plan was hoping for. It was noise. The
+panel plots every replicate as a dot on a shared axis for this reason: if the two clouds
+overlap, you see the overlap at the same moment you read the number.
+
+### Why the answer is probably "not enough model", not "not enough resistance"
+
+S450L is about as well-established as resistance mutations get, so the honest reading is
+that this configuration cannot see it, and there are three concrete reasons why:
+
+- **No MSA.** Co-folding a 1178-residue chain from a single sequence gives a low-confidence
+  complex — pLDDT ≈ 0.46, ligand ipTM ≈ 0.6 — and the affinity is read off that complex.
+- **The wrong assembly.** Rifampicin binds the assembled RNA polymerase holoenzyme. This
+  predicts the isolated rpoB subunit, and part of the real pocket is simply absent.
+- **The wrong task.** Boltz-2's affinity head is trained for hit discovery — telling binders
+  from decoys across diverse ligands — not for resolving one substitution's effect on a
+  known binder.
+
+Note that the pocket cannot be trimmed to make this cheaper: the rifampicin-contact
+residues run from clinical 167 to 674, so no contiguous fragment contains the binding site.
+It is the whole chain or nothing.
+
+### The demo fence
+
+A live run is six co-folds of a 1178-residue chain — about four minutes on a rate-limited
+cloud GPU. So the comparison is **pre-baked into `public/data/affinity-cache.json` from real
+runs** and served instantly; the live button is opt-in, and a live run that fails or times
+out falls back to the cached result rather than erroring. Nothing in that cache is
+synthetic. Regenerate it with `node scripts/make_affinity_cache.mjs S450L 5`.
+
+The key is read server-side in `src/lib/boltz.ts`, goes to NVIDIA and nowhere else, and
+never reaches the browser. With no key set the panel still renders the cached comparison and
+simply does not offer a live run.
+
+### What this is worth
+
+A negative result from a properly replicated experiment is a real result. The structural
+pipeline in the rest of this app measures a geometry that already exists — 2.71 Å is 2.71 Å.
+This predicts a quantity, which is a far stronger claim, and on this evidence it cannot
+support it. Reporting the noisy first pair as a 2× affinity drop would have been the easiest
+and least honest thing in the whole project.
+
 ## The numbering trap
 
 CARD and the WHO catalogue number rpoB against **NP_215181.1 (1172 aa)**. UniProt
@@ -314,6 +394,8 @@ across all 1171 shared residues.
 | `public/data/rifampicin-pose.pdb` | PDB 5UHC ligand RFP, superposed onto the AlphaFold model |
 | `public/data/pocket-rpob-rifampicin.json` | rpoB residues within 5 Å of rifampicin in 5UHC |
 | `public/data/card-rpob-rifampicin.json` | CARD `snps.txt`, ARO:3003283 — 157 substitutions |
+| `public/data/golden-set.json` | Hand-labelled eval set: 5 CARD/WHO resistant, 5 proxy-neutral, 1 declared failure |
+| `public/data/affinity-cache.json` | 5+5 real Boltz-2 NIM runs, wild type vs S450L (nothing synthetic) |
 
 See [scripts/README.md](scripts/README.md) to regenerate any of these from primary sources.
 
@@ -333,6 +415,9 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
   anything measured here.
 - "Novel" means absent from the bundled CARD export, which is a snapshot. It does not
   mean absent from the literature.
+- The Boltz-2 affinity comparison is a **predicted** quantity and, as run here, does not
+  resolve S450L from wild type. Treat it as a demonstration of the method and of how to
+  report a null result, not as a resistance readout.
 - The eval is ten mutations with **proxy negatives** — no confirmed-susceptible phenotypes,
   because CARD catalogues resistance determinants and has no benign list. Perfect separation
   on it is a demonstration that the score measures what it claims to, not evidence that the
@@ -348,4 +433,4 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
 ## Stack
 
 Next.js 16 · React 19 · Tailwind 4 · 3Dmol.js · Ollama (`qwen3:8b`, local) for the
-mechanistic reasoning.
+mechanistic reasoning · Boltz-2 via NVIDIA NIM (optional, stretch) for predicted affinity.
