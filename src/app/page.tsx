@@ -26,20 +26,35 @@ type Mode = "pipeline" | "agent";
  */
 type View = "single" | "triage" | "eval";
 
-const HERO_MUTATION = "rpoB S450L";
+/** What /api/targets returns: whatever is bundled in scripts/targets.json. */
+export interface TargetSummary {
+  id: string; gene: string; drug: string; drugClass: string; organism: string;
+  proteinName: string; blurb: string; uniprotAccession: string; complexPdbId: string;
+  ligandCode: string; structureFile: string; ligandPoseFile: string;
+  clinicalReference: string; clinicalToUniprotOffset: number; clinicalLength: number;
+  hasGoldenSet: boolean;
+}
+
+import { TARGETS } from "@/lib/targets";
+
 /**
- * Two of these are the point of the project. S450P sits on the single closest contact
- * residue to rifampicin, and N487D on another contact residue - and CARD catalogues
- * neither. A catalogue-only tool has nothing to say about either one.
+ * The examples are data, not markup: each target in scripts/targets.json carries its own
+ * tour, and each entry says what it is meant to demonstrate. Adding a target adds its
+ * examples with it.
  */
-const EXAMPLES = [
-  "rpoB S450L",
-  "rpoB H445Y",
-  "rpoB I491F",
-  "rpoB S450P",
-  "rpoB N487D",
-  "rpoB E592D",
-];
+const HERO_TARGET = TARGETS[0];
+const HERO_MUTATION = `${HERO_TARGET.gene} ${HERO_TARGET.heroMutation}`;
+
+/** The viewer needs the ligand's PDB residue name to style it; the server knows it. */
+function ligandCodeFor(targets: TargetSummary[], id: string): string {
+  return targets.find((t) => t.id === id)?.ligandCode ?? "LIG";
+}
+
+const KIND_STYLE: Record<string, string> = {
+  catalogued: "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200",
+  novel: "border-fuchsia-800 text-fuchsia-300 hover:border-fuchsia-600 hover:text-fuchsia-200",
+  distal: "border-amber-800 text-amber-300 hover:border-amber-600 hover:text-amber-200",
+};
 
 interface ModelHealth {
   available: boolean;
@@ -56,6 +71,8 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
 
   const [view, setView] = useState<View>("single");
+  const [targets, setTargets] = useState<TargetSummary[]>([]);
+  const [targetId, setTargetId] = useState<string>(HERO_TARGET.id);
   const [triageFocus, setTriageFocus] = useState<ViewerFocus | null>(null);
 
   const [mode, setMode] = useState<Mode>("pipeline");
@@ -68,7 +85,7 @@ export default function Home() {
   const reasoningAbort = useRef<AbortController | null>(null);
 
   /** Ask the local model for a mechanism, cancelling any question still in flight. */
-  const requestReasoning = useCallback(async (mutation: string, nextMode: Mode) => {
+  const requestReasoning = useCallback(async (mutation: string, nextMode: Mode, target: string) => {
     reasoningAbort.current?.abort();
     const controller = new AbortController();
     reasoningAbort.current = controller;
@@ -81,7 +98,7 @@ export default function Home() {
       const res = await fetch(nextMode === "agent" ? "/api/agent" : "/api/reason", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mutation }),
+        body: JSON.stringify({ mutation, target }),
         signal: controller.signal,
       });
       const body = await res.json();
@@ -96,8 +113,10 @@ export default function Home() {
     }
   }, []);
 
+  /** `target` is passed rather than read from state so that switching target can analyse
+   *  the new one immediately, instead of one render behind. */
   const analyse = useCallback(
-    async (mutation: string, nextMode: Mode = mode) => {
+    async (mutation: string, nextMode: Mode = mode, target: string = targetId) => {
       setBusy(true);
       setError(null);
       setLastQuery(mutation);
@@ -105,7 +124,7 @@ export default function Home() {
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mutation }),
+          body: JSON.stringify({ mutation, target }),
         });
         const body = await res.json();
         if (!res.ok) {
@@ -119,7 +138,7 @@ export default function Home() {
         } else {
           setResult(body as AnalysisResult);
           // The structure renders immediately; the model reasons over it in the background.
-          void requestReasoning(mutation, nextMode);
+          void requestReasoning(mutation, nextMode, target);
         }
       } catch {
         setError("Could not reach the analysis service.");
@@ -128,7 +147,7 @@ export default function Home() {
         setBusy(false);
       }
     },
-    [mode, requestReasoning],
+    [mode, requestReasoning, targetId],
   );
 
   // The safety net: the hero case is analysed on load, entirely from local files.
@@ -136,6 +155,13 @@ export default function Home() {
     void analyse(HERO_MUTATION, "pipeline");
     // Load-time only; switching mode later re-runs through switchMode, not through here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/targets")
+      .then((r) => r.json())
+      .then((b: { targets: TargetSummary[] }) => setTargets(b.targets))
+      .catch(() => setTargets([]));
   }, []);
 
   // Cold-loading an 8B model costs ~10s, so pay it before anyone is watching.
@@ -150,7 +176,7 @@ export default function Home() {
   const switchMode = (next: Mode) => {
     if (next === mode) return;
     setMode(next);
-    if (result) void requestReasoning(lastQuery, next);
+    if (result) void requestReasoning(lastQuery, next, targetId);
   };
 
   const focus: ViewerFocus | null = result
@@ -159,8 +185,28 @@ export default function Home() {
         label: `${result.input.canonical} (structure ${result.numbering.uniprotResnum})`,
         pocketUniprotResnums: result.pocket.uniprotResnums,
         center: result.structure.drug.residueCenter,
+        structureFile: result.target.structureFile,
+        ligandPoseFile: result.target.ligandPoseFile,
+        ligandCode: ligandCodeFor(targets, result.target.id),
+        drug: result.target.drug,
       }
     : null;
+
+  const active = targets.find((t) => t.id === targetId) ?? null;
+  const currentTarget = TARGETS.find((t) => t.id === targetId) ?? HERO_TARGET;
+
+  /** Selecting a different target re-analyses its own hero case rather than stranding the
+   *  previous gene's mutation against a structure that does not contain that residue. */
+  const switchTarget = (next: string) => {
+    if (next === targetId) return;
+    const t = TARGETS.find((x) => x.id === next);
+    setTargetId(next);
+    if (t) {
+      const mutation = `${t.gene} ${t.heroMutation}`;
+      setInput(mutation);
+      void analyse(mutation, mode, next);
+    }
+  };
 
   const viewerFocus = view === "triage" ? (triageFocus ?? focus) : focus;
 
@@ -201,7 +247,12 @@ export default function Home() {
         }`}
       >
         <section className={view === "triage" ? "min-w-0" : "hidden"}>
+          {/* Keyed by target: switching gene strands the old isolate against a structure
+              that does not contain those residues, so the panel is rebuilt rather than
+              patched up field by field. */}
           <TriagePanel
+            key={targetId}
+            targetId={targetId}
             modelAvailable={health ? health.available && health.modelPresent : true}
             onSelect={setTriageFocus}
             onOpenSingle={(mutation) => {
@@ -213,6 +264,8 @@ export default function Home() {
         </section>
 
         <section className={view === "single" ? "flex flex-col gap-5" : "hidden"}>
+          <TargetPicker targets={targets} active={targetId} onChange={switchTarget} />
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -240,30 +293,32 @@ export default function Home() {
                 {busy ? "Analysing…" : "Analyse"}
               </button>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setInput(HERO_MUTATION);
-                  void analyse(HERO_MUTATION);
-                }}
-                className="rounded-md border border-teal-700 bg-teal-950/60 px-2.5 py-1 text-xs text-teal-300 transition hover:bg-teal-900/60"
-              >
-                ▶ Demo: {HERO_MUTATION}
-              </button>
-              {EXAMPLES.slice(1).map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => {
-                    setInput(ex);
-                    void analyse(ex);
-                  }}
-                  className="rounded-md border border-slate-700 px-2.5 py-1 font-mono text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
-                >
-                  {ex}
-                </button>
-              ))}
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                Cases worth trying on {active?.gene ?? HERO_TARGET.gene} — hover any button for
+                what it demonstrates. <span className="text-fuchsia-400">Pink</span> is absent
+                from the catalogue, which is the case this tool exists for;{" "}
+                <span className="text-amber-400">amber</span> is one it gets wrong.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {currentTarget.examples.map((ex) => {
+                  const full = `${currentTarget.gene} ${ex.mutation}`;
+                  return (
+                    <button
+                      key={ex.mutation}
+                      type="button"
+                      title={ex.why}
+                      onClick={() => {
+                        setInput(full);
+                        void analyse(full);
+                      }}
+                      className={`rounded-md border px-2.5 py-1 font-mono text-xs transition ${KIND_STYLE[ex.kind]}`}
+                    >
+                      {ex.mutation}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </form>
 
@@ -312,9 +367,60 @@ export default function Home() {
           set costs a couple of minutes of local inference, and switching tabs to point at the
           structure must not throw it away. It also makes the tab open instantly. */}
       <div className={view === "eval" ? "mt-6" : "hidden"}>
-        <EvalPanel />
+        <EvalPanel targetId={targetId} />
       </div>
     </main>
+  );
+}
+
+/**
+ * Which drug target the question is about. This is the abstraction made visible: the list
+ * comes from the server, which reads scripts/targets.json, so a new target appears here
+ * without a line of UI changing. Each option states the gene, the drug it is up against,
+ * and one sentence of why that pairing matters, because "rpoB + rifampicin" means nothing
+ * to a reader who does not already know the field.
+ */
+function TargetPicker({
+  targets,
+  active,
+  onChange,
+}: {
+  targets: TargetSummary[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  const current = targets.find((t) => t.id === active) ?? null;
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor="target" className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        Drug target — the protein the antibiotic has to hit
+      </label>
+      <select
+        id="target"
+        value={active}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-500"
+      >
+        {(targets.length ? targets : []).map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.gene} + {t.drug} ({t.drugClass})
+          </option>
+        ))}
+        {targets.length === 0 && <option>loading…</option>}
+      </select>
+      {current && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2">
+          <p className="text-xs leading-relaxed text-slate-400">{current.blurb}</p>
+          <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-slate-600">
+            {current.proteinName} · {current.organism} · AlphaFold {current.uniprotAccession} ·
+            drug pose from PDB {current.complexPdbId} ({current.ligandCode}) ·{" "}
+            {current.clinicalToUniprotOffset === 0
+              ? "catalogue and structure numbering agree"
+              : `catalogue numbering is ${current.clinicalToUniprotOffset} behind the structure`}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -369,7 +475,7 @@ function ResultPanel({
       />
 
       {/* The stretch. Everything above is measured; this one predicts, and says so. */}
-      <AffinityPanel mutation={result.input.canonical} />
+      <AffinityPanel mutation={result.input.canonical} targetId={result.target.id} />
 
       <Card title="Measured from coordinates">
         <Metric

@@ -7,6 +7,7 @@ import type { ViewerFocus } from "@/components/StructureViewer";
 import { runPool } from "@/lib/pool";
 import type { MechanisticReasoning } from "@/lib/reasoning";
 import { SCORE_DEFINITION } from "@/lib/score";
+import { TARGETS } from "@/lib/targets";
 import type { TriageResult, TriageRow } from "@/lib/triage";
 
 /**
@@ -23,16 +24,14 @@ import type { TriageResult, TriageRow } from "@/lib/triage";
  * catalogued distal one this method is known to miss, and three ordinary distant changes
  * of the kind that dominate a real variant call.
  */
-const DEMO_ISOLATE = [
-  "rpoB S450L",
-  "rpoB S450P",
-  "rpoB N487D",
-  "rpoB H445Y",
-  "rpoB E592D",
-  "rpoB V800I",
-  "rpoB S100T",
-  "rpoB I1100V",
-].join("\n");
+function isolateFor(targetId: string): string {
+  const t = TARGETS.find((x) => x.id === targetId) ?? TARGETS[0];
+  const listed = t.examples.map((e) => `${t.gene} ${e.mutation}`);
+  // Pad with quiet, distant changes so the table is not all signal - a real variant call is
+  // mostly noise, and a triage view that only ever shows hits proves nothing.
+  const filler = (t.quietExamples ?? []).map((m) => `${t.gene} ${m}`);
+  return [...listed, ...filler].join("\n");
+}
 
 /**
  * One at a time, which is measured rather than assumed. Ollama serves a single 8B model
@@ -45,15 +44,17 @@ const DEMO_ISOLATE = [
 const MODEL_CONCURRENCY = 1;
 
 export default function TriagePanel({
+  targetId,
   onSelect,
   onOpenSingle,
   modelAvailable,
 }: {
+  targetId: string;
   onSelect: (focus: ViewerFocus) => void;
   onOpenSingle: (mutation: string) => void;
   modelAvailable: boolean;
 }) {
-  const [text, setText] = useState(DEMO_ISOLATE);
+  const [text, setText] = useState(() => isolateFor(targetId));
   const [result, setResult] = useState<TriageResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -83,7 +84,7 @@ export default function TriagePanel({
             const res = await fetch("/api/reason", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mutation: row.input }),
+              body: JSON.stringify({ mutation: row.input, target: targetId }),
               signal,
             });
             if (res.ok) {
@@ -102,7 +103,7 @@ export default function TriagePanel({
         signal,
       );
     },
-    [],
+    [targetId],
   );
 
   const triage = useCallback(async () => {
@@ -119,7 +120,7 @@ export default function TriagePanel({
       const res = await fetch("/api/triage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mutations: text }),
+        body: JSON.stringify({ mutations: text, target: targetId }),
         signal: controller.signal,
       });
       const body = await res.json();
@@ -136,16 +137,21 @@ export default function TriagePanel({
     } finally {
       setBusy(false);
     }
-  }, [askModel, modelAvailable, text]);
+  }, [askModel, modelAvailable, text, targetId]);
 
   const select = (row: TriageRow, pocket: number[]) => {
-    if (row.uniprotResnum === null || !row.residueCenter) return;
+    if (row.uniprotResnum === null || !row.residueCenter || !result) return;
+    const t = TARGETS.find((x) => x.id === result.target.id) ?? TARGETS[0];
     setSelected(row.canonical);
     onSelect({
       uniprotResnum: row.uniprotResnum,
       label: `${row.canonical} (structure ${row.uniprotResnum})`,
       center: row.residueCenter,
       pocketUniprotResnums: pocket,
+      structureFile: t.structureFile,
+      ligandPoseFile: t.ligandPoseFile,
+      ligandCode: t.ligandCode,
+      drug: t.drug,
     });
   };
 
@@ -186,7 +192,7 @@ export default function TriagePanel({
           </button>
           <button
             type="button"
-            onClick={() => setText(DEMO_ISOLATE)}
+            onClick={() => setText(isolateFor(targetId))}
             className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
           >
             Reset to the demo isolate

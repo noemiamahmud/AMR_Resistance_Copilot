@@ -22,7 +22,7 @@ export interface PocketResidueRef {
   uniprotResnum: number;
   clinicalResnum: number;
   aa: string;
-  minDistanceToRifampicin: number;
+  minDistanceToLigand: number;
 }
 
 export interface Point3D { x: number; y: number; z: number }

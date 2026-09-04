@@ -1,0 +1,221 @@
+{
+  "source": {
+    "pdbId": "1ZID",
+    "description": "inhA residues within 5.0 A of isoniazid (ZID) in 1ZID",
+    "contactCutoffAngstroms": 5.0,
+    "method": "measured contacts in 1ZID chain A, not a curated literature list"
+  },
+  "residueCount": 35,
+  "residues": [
+    {
+      "uniprotResnum": 14,
+      "clinicalResnum": 14,
+      "aa": "G",
+      "minDistanceToLigand": 2.46
+    },
+    {
+      "uniprotResnum": 15,
+      "clinicalResnum": 15,
+      "aa": "I",
+      "minDistanceToLigand": 3.5
+    },
+    {
+      "uniprotResnum": 16,
+      "clinicalResnum": 16,
+      "aa": "I",
+      "minDistanceToLigand": 3.59
+    },
+    {
+      "uniprotResnum": 17,
+      "clinicalResnum": 17,
+      "aa": "T",
+      "minDistanceToLigand": 4.46
+    },
+    {
+      "uniprotResnum": 20,
+      "clinicalResnum": 20,
+      "aa": "S",
+      "minDistanceToLigand": 2.8
+    },
+    {
+      "uniprotResnum": 21,
+      "clinicalResnum": 21,
+      "aa": "I",
+      "minDistanceToLigand": 2.78
+    },
+    {
+      "uniprotResnum": 22,
+      "clinicalResnum": 22,
+      "aa": "A",
+      "minDistanceToLigand": 4.55
+    },
+    {
+      "uniprotResnum": 40,
+      "clinicalResnum": 40,
+      "aa": "G",
+      "minDistanceToLigand": 4.63
+    },
+    {
+      "uniprotResnum": 41,
+      "clinicalResnum": 41,
+      "aa": "F",
+      "minDistanceToLigand": 3.4
+    },
+    {
+      "uniprotResnum": 63,
+      "clinicalResnum": 63,
+      "aa": "L",
+      "minDistanceToLigand": 3.29
+    },
+    {
+      "uniprotResnum": 64,
+      "clinicalResnum": 64,
+      "aa": "D",
+      "minDistanceToLigand": 3.03
+    },
+    {
+      "uniprotResnum": 65,
+      "clinicalResnum": 65,
+      "aa": "V",
+      "minDistanceToLigand": 3.12
+    },
+    {
+      "uniprotResnum": 66,
+      "clinicalResnum": 66,
+      "aa": "Q",
+      "minDistanceToLigand": 4.15
+    },
+    {
+      "uniprotResnum": 94,
+      "clinicalResnum": 94,
+      "aa": "S",
+      "minDistanceToLigand": 3.48
+    },
+    {
+      "uniprotResnum": 95,
+      "clinicalResnum": 95,
+      "aa": "I",
+      "minDistanceToLigand": 3.24
+    },
+    {
+      "uniprotResnum": 96,
+      "clinicalResnum": 96,
+      "aa": "G",
+      "minDistanceToLigand": 3.18
+    },
+    {
+      "uniprotResnum": 97,
+      "clinicalResnum": 97,
+      "aa": "F",
+      "minDistanceToLigand": 3.89
+    },
+    {
+      "uniprotResnum": 122,
+      "clinicalResnum": 122,
+      "aa": "I",
+      "minDistanceToLigand": 3.34
+    },
+    {
+      "uniprotResnum": 147,
+      "clinicalResnum": 147,
+      "aa": "M",
+      "minDistanceToLigand": 3.29
+    },
+    {
+      "uniprotResnum": 148,
+      "clinicalResnum": 148,
+      "aa": "D",
+      "minDistanceToLigand": 3.53
+    },
+    {
+      "uniprotResnum": 149,
+      "clinicalResnum": 149,
+      "aa": "F",
+      "minDistanceToLigand": 3.53
+    },
+    {
+      "uniprotResnum": 155,
+      "clinicalResnum": 155,
+      "aa": "M",
+      "minDistanceToLigand": 4.15
+    },
+    {
+      "uniprotResnum": 158,
+      "clinicalResnum": 158,
+      "aa": "Y",
+      "minDistanceToLigand": 3.8
+    },
+    {
+      "uniprotResnum": 161,
+      "clinicalResnum": 161,
+      "aa": "M",
+      "minDistanceToLigand": 3.6
+    },
+    {
+      "uniprotResnum": 165,
+      "clinicalResnum": 165,
+      "aa": "K",
+      "minDistanceToLigand": 2.88
+    },
+    {
+      "uniprotResnum": 191,
+      "clinicalResnum": 191,
+      "aa": "A",
+      "minDistanceToLigand": 3.23
+    },
+    {
+      "uniprotResnum": 192,
+      "clinicalResnum": 192,
+      "aa": "G",
+      "minDistanceToLigand": 3.55
+    },
+    {
+      "uniprotResnum": 193,
+      "clinicalResnum": 193,
+      "aa": "P",
+      "minDistanceToLigand": 3.83
+    },
+    {
+      "uniprotResnum": 194,
+      "clinicalResnum": 194,
+      "aa": "I",
+      "minDistanceToLigand": 2.94
+    },
+    {
+      "uniprotResnum": 195,
+      "clinicalResnum": 195,
+      "aa": "R",
+      "minDistanceToLigand": 4.99
+    },
+    {
+      "uniprotResnum": 196,
+      "clinicalResnum": 196,
+      "aa": "T",
+      "minDistanceToLigand": 3.2
+    },
+    {
+      "uniprotResnum": 198,
+      "clinicalResnum": 198,
+      "aa": "A",
+      "minDistanceToLigand": 4.51
+    },
+    {
+      "uniprotResnum": 199,
+      "clinicalResnum": 199,
+      "aa": "M",
+      "minDistanceToLigand": 3.25
+    },
+    {
+      "uniprotResnum": 218,
+      "clinicalResnum": 218,
+      "aa": "L",
+      "minDistanceToLigand": 4.65
+    },
+    {
+      "uniprotResnum": 222,
+      "clinicalResnum": 222,
+      "aa": "W",
+      "minDistanceToLigand": 3.62
+    }
+  ]
+}

@@ -16,8 +16,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let mutation: unknown;
+  let target: string | null = null;
   try {
-    ({ mutation } = await request.json());
+    const body = await request.json();
+    mutation = body.mutation;
+    target = typeof body.target === "string" ? body.target : null;
   } catch {
     return NextResponse.json({ error: "Request body must be JSON." }, { status: 400 });
   }
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const analysis = await analyseMutation(mutation);
+    const analysis = await analyseMutation(mutation, target);
     // The browser aborts this request when the analyst asks about a different mutation.
     const reasoning = await reasonAboutMutation(analysis, { signal: request.signal });
     return NextResponse.json({ mutation: analysis.input.canonical, reasoning });

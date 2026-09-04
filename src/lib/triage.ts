@@ -15,7 +15,7 @@
 import { AnalysisError, AnalysisResult, analyseMutation } from "./analysis";
 import { MutationParseError } from "./mutation";
 import { StructuralCall, StructuralScore, scoreAnalysis } from "./score";
-import { RPOB_RIFAMPICIN } from "./targets";
+import { TargetDefinition, resolveTarget } from "./targets";
 
 /** More than this in one paste is a file upload, not an isolate. */
 export const MAX_BATCH = 24;
@@ -47,7 +47,7 @@ export interface TriageRow {
 }
 
 export interface TriageResult {
-  target: { gene: string; organism: string; drug: string };
+  target: { id: string; gene: string; organism: string; drug: string };
   /** Same for every row, so the viewer gets it once rather than per row. */
   pocketUniprotResnums: number[];
   requested: number;
@@ -130,7 +130,12 @@ function rank(a: TriageRow, b: TriageRow): number {
   return a.minDistanceToDrugAngstroms! - b.minDistanceToDrugAngstroms!;
 }
 
-export async function triageBatch(input: string | string[]): Promise<TriageResult> {
+export async function triageBatch(
+  input: string | string[],
+  targetId?: string | null,
+): Promise<TriageResult> {
+  const target: TargetDefinition | undefined = resolveTarget(targetId, null);
+  if (!target) throw new AnalysisError(`Unknown target "${targetId}".`);
   const requestedList = Array.isArray(input) ? input : parseBatch(input);
   if (requestedList.length === 0) {
     throw new MutationParseError("Paste at least one mutation, one per line.");
@@ -150,7 +155,7 @@ export async function triageBatch(input: string | string[]): Promise<TriageResul
   // dominated by the first load. Nothing here touches the network or the model.
   for (const one of requestedList) {
     try {
-      const analysis = await analyseMutation(one);
+      const analysis = await analyseMutation(one, targetId);
       if (seen.has(analysis.input.canonical)) {
         duplicatesDropped++;
         continue;
@@ -176,11 +181,7 @@ export async function triageBatch(input: string | string[]): Promise<TriageResul
   const countOf = (call: StructuralCall) => scored.filter((r) => r.score!.call === call).length;
 
   return {
-    target: {
-      gene: RPOB_RIFAMPICIN.gene,
-      organism: RPOB_RIFAMPICIN.organism,
-      drug: RPOB_RIFAMPICIN.drug,
-    },
+    target: { id: target.id, gene: target.gene, organism: target.organism, drug: target.drug },
     pocketUniprotResnums,
     requested: requestedList.length,
     analysed: scored.length,

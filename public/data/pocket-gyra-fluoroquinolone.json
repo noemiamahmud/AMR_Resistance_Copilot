@@ -1,0 +1,29 @@
+{
+  "source": {
+    "pdbId": "5BS8",
+    "description": "gyrA residues within 5.0 A of moxifloxacin (MFX) in 5BS8",
+    "contactCutoffAngstroms": 5.0,
+    "method": "measured contacts in 5BS8 chain A, not a curated literature list"
+  },
+  "residueCount": 3,
+  "residues": [
+    {
+      "uniprotResnum": 88,
+      "clinicalResnum": 88,
+      "aa": "G",
+      "minDistanceToLigand": 4.18
+    },
+    {
+      "uniprotResnum": 90,
+      "clinicalResnum": 90,
+      "aa": "A",
+      "minDistanceToLigand": 2.69
+    },
+    {
+      "uniprotResnum": 91,
+      "clinicalResnum": 91,
+      "aa": "S",
+      "minDistanceToLigand": 3.69
+    }
+  ]
+}

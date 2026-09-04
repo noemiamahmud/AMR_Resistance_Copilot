@@ -1,0 +1,212 @@
+{
+  "catalogue": "CARD (Comprehensive Antibiotic Resistance Database)",
+  "sourceFile": "snps.txt",
+  "aro": "ARO:3003295",
+  "model": "protein variant model",
+  "target": "gyrA",
+  "organism": "Mycobacterium tuberculosis H37Rv",
+  "drug": "moxifloxacin",
+  "numbering": "clinical / WHO - NP_214520.1; add 0 for UniProt P9WG47",
+  "note": "Substitution-level entries only. 4 nonsense/unspecified/indel records were skipped because they have no single-residue structural equivalent, and 2 substitutions were dropped because their wild-type residue disagrees with the structure sequence (D472H (structure has P), D500N (structure has A)).",
+  "entryCount": 18,
+  "entries": [
+    {
+      "mutation": "A74S",
+      "wildType": "A",
+      "clinicalResnum": 74,
+      "mutant": "S",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "17035499"
+    },
+    {
+      "mutation": "T80A",
+      "wildType": "T",
+      "clinicalResnum": 80,
+      "mutant": "A",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "17035499"
+    },
+    {
+      "mutation": "G88A",
+      "wildType": "G",
+      "clinicalResnum": 88,
+      "mutant": "A",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "978-92-4-008241-0"
+    },
+    {
+      "mutation": "G88C",
+      "wildType": "G",
+      "clinicalResnum": 88,
+      "mutant": "C",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "30337678"
+    },
+    {
+      "mutation": "D89G",
+      "wildType": "D",
+      "clinicalResnum": 89,
+      "mutant": "G",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "21300839"
+    },
+    {
+      "mutation": "D89N",
+      "wildType": "D",
+      "clinicalResnum": 89,
+      "mutant": "N",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "978-92-4-008241-0"
+    },
+    {
+      "mutation": "D89V",
+      "wildType": "D",
+      "clinicalResnum": 89,
+      "mutant": "V",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "21300839"
+    },
+    {
+      "mutation": "A90G",
+      "wildType": "A",
+      "clinicalResnum": 90,
+      "mutant": "G",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "21300839"
+    },
+    {
+      "mutation": "A90V",
+      "wildType": "A",
+      "clinicalResnum": 90,
+      "mutant": "V",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "30337678"
+    },
+    {
+      "mutation": "S91P",
+      "wildType": "S",
+      "clinicalResnum": 91,
+      "mutant": "P",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "21300839"
+    },
+    {
+      "mutation": "D94A",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "A",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "35944069"
+    },
+    {
+      "mutation": "D94G",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "G",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "35944069"
+    },
+    {
+      "mutation": "D94H",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "H",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "978-92-4-008241-0"
+    },
+    {
+      "mutation": "D94N",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "N",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "30337678"
+    },
+    {
+      "mutation": "D94T",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "T",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "27847014"
+    },
+    {
+      "mutation": "D94V",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "V",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "21300839"
+    },
+    {
+      "mutation": "D94Y",
+      "wildType": "D",
+      "clinicalResnum": 94,
+      "mutant": "Y",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "978-92-4-008241-0"
+    },
+    {
+      "mutation": "P102H",
+      "wildType": "P",
+      "clinicalResnum": 102,
+      "mutant": "H",
+      "aro": "ARO:3003295",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "CRyPTIC-R",
+      "citation": "16584301"
+    }
+  ]
+}

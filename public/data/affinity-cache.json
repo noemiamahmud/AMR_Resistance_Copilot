@@ -1,6 +1,6 @@
 {
   "generatedIso": "2026-09-03T00:00:00.000Z",
-  "note": "Pre-baked so a demo never waits on a rate-limited cloud GPU. Every number here came from a real Boltz-2 NIM run; nothing is synthetic. Regenerate with scripts/make_affinity_cache.mjs.",
+  "note": "Pre-baked so a demo never waits on a rate-limited cloud GPU. Every number here came from a real Boltz-2 NIM run; nothing is synthetic. Regenerate with scripts/make_affinity_cache.mjs. Keys are '<targetId>:<mutation>' - a bare mutation is ambiguous once more than one gene is bundled.",
   "ligand": {
     "name": "rifampicin",
     "smiles": "Cc1c(c2c3c4c1O[C@@](C4=O)(O\\C=C\\[C@@H]([C@H]([C@H]([C@@H]([C@@H]([C@@H]([C@H]([C@H](C=C\\C=C(/C(=O)Nc(c2O)c(c3O)\\C=N\\N5CCN(CC5)C)\\C)C)O)C)O)C)OC(=O)C)C)OC)C)O",
@@ -14,7 +14,7 @@
     "settings": "recycling_steps 3, sampling_steps 50, diffusion_samples 1, sampling_steps_affinity 200, diffusion_samples_affinity 5. Wild-type and mutant requests interleaved."
   },
   "runs": {
-    "S450L": {
+    "rpob-rifampicin:S450L": {
       "wildType": [
         {
           "affinityLog10IC50Micromolar": 0.043212890625,

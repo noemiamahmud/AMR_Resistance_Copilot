@@ -9,8 +9,11 @@ import { triageBatch } from "@/lib/triage";
  */
 export async function POST(request: Request) {
   let mutations: unknown;
+  let target: string | null = null;
   try {
-    ({ mutations } = await request.json());
+    const body = await request.json();
+    mutations = body.mutations;
+    target = typeof body.target === "string" ? body.target : null;
   } catch {
     return NextResponse.json({ error: "Request body must be JSON." }, { status: 400 });
   }
@@ -22,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await triageBatch(mutations as string | string[]));
+    return NextResponse.json(await triageBatch(mutations as string | string[], target));
   } catch (err) {
     if (err instanceof MutationParseError || err instanceof AnalysisError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

@@ -13,7 +13,13 @@ import type { AffinityArm, AffinityComparison, AffinityResult } from "@/lib/affi
  * before you read the verdict. Two bars would have hidden exactly the thing that matters.
  */
 
-export default function AffinityPanel({ mutation }: { mutation: string }) {
+export default function AffinityPanel({
+  mutation,
+  targetId,
+}: {
+  mutation: string;
+  targetId: string;
+}) {
   const [data, setData] = useState<AffinityResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -39,7 +45,7 @@ export default function AffinityPanel({ mutation }: { mutation: string }) {
     abort.current = controller;
     (async () => {
       try {
-        const res = await fetch(`/api/affinity?mutation=${encodeURIComponent(mutation)}`, {
+        const res = await fetch(`/api/affinity?mutation=${encodeURIComponent(mutation)}&target=${encodeURIComponent(targetId)}`, {
           signal: controller.signal,
         });
         await receive(res);
@@ -50,7 +56,7 @@ export default function AffinityPanel({ mutation }: { mutation: string }) {
       }
     })();
     return () => controller.abort();
-  }, [mutation, receive]);
+  }, [mutation, targetId, receive]);
 
   const runLive = useCallback(async () => {
     abort.current?.abort();
@@ -60,7 +66,7 @@ export default function AffinityPanel({ mutation }: { mutation: string }) {
     setError(null);
     try {
       const res = await fetch(
-        `/api/affinity?mutation=${encodeURIComponent(mutation)}&live=1&replicates=3`,
+        `/api/affinity?mutation=${encodeURIComponent(mutation)}&target=${encodeURIComponent(targetId)}&live=1&replicates=3`,
         { signal: controller.signal },
       );
       await receive(res);
@@ -69,7 +75,7 @@ export default function AffinityPanel({ mutation }: { mutation: string }) {
     } finally {
       if (abort.current === controller) setLiveBusy(false);
     }
-  }, [mutation, receive]);
+  }, [mutation, targetId, receive]);
 
   const comparison = data?.comparison ?? null;
 

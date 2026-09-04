@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CallBadge, LikelihoodBadge, ScoreBar } from "@/components/ScoreUI";
 import type { EvalRow, EvaluationResult } from "@/lib/evaluation";
+
+interface NoGoldenSet {
+  noGoldenSet: true;
+  target: { gene: string; drug: string };
+  available: { id: string; gene: string; drug: string }[];
+}
 import { runPool } from "@/lib/pool";
 import type { MechanisticReasoning, ResistanceLikelihood } from "@/lib/reasoning";
 
@@ -36,8 +42,9 @@ function likelihoodIsPositive(l: ResistanceLikelihood): boolean {
   return l === "high" || l === "moderate";
 }
 
-export default function EvalPanel() {
+export default function EvalPanel({ targetId }: { targetId: string }) {
   const [data, setData] = useState<EvaluationResult | null>(null);
+  const [noGolden, setNoGolden] = useState<NoGoldenSet | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [verdicts, setVerdicts] = useState<Record<string, MechanisticReasoning>>({});
@@ -47,12 +54,18 @@ export default function EvalPanel() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/eval")
+    fetch(`/api/eval?target=${encodeURIComponent(targetId)}`)
       .then(async (r) => {
         const body = await r.json();
         if (cancelled) return;
         if (!r.ok) setError(body.error ?? "The evaluation could not be run.");
-        else setData(body as EvaluationResult);
+        else if ((body as { noGoldenSet?: boolean }).noGoldenSet) {
+          setData(null);
+          setNoGolden(body as NoGoldenSet);
+        } else {
+          setNoGolden(null);
+          setData(body as EvaluationResult);
+        }
       })
       .catch(() => {
         if (!cancelled) setError("Could not reach the evaluation service.");
@@ -61,7 +74,7 @@ export default function EvalPanel() {
       cancelled = true;
       abort.current?.abort();
     };
-  }, []);
+  }, [targetId]);
 
   const runModel = useCallback(async () => {
     if (!data) return;
@@ -80,7 +93,7 @@ export default function EvalPanel() {
           const res = await fetch("/api/reason", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mutation: row.mutation }),
+            body: JSON.stringify({ mutation: row.mutation, target: targetId }),
             signal: controller.signal,
           });
           if (res.ok) {
@@ -96,13 +109,34 @@ export default function EvalPanel() {
       controller.signal,
     );
     if (!controller.signal.aborted) setModelBusy(false);
-  }, [data]);
+  }, [data, targetId]);
 
   if (error) {
     return (
       <p className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300">
         {error}
       </p>
+    );
+  }
+  if (noGolden) {
+    const others = noGolden.available.map((t) => `${t.gene} + ${t.drug}`).join(", ");
+    return (
+      <div className="max-w-3xl rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+        <p className="text-sm font-medium text-slate-200">
+          No labelled ground truth for {noGolden.target.gene} + {noGolden.target.drug}
+        </p>
+        <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+          An eval needs mutations somebody has already phenotyped, and curating that is a
+          human judgement rather than something the pipeline can generate. Only {others || "no target"}{" "}
+          has a hand-labelled set in this build, so that is the only target this view can score.
+        </p>
+        <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+          Everything else — the structural measurements, the ranking, the catalogue flag — works
+          on this target exactly as it does on the scored one. What is missing is the evidence
+          that the score is right here, and the honest thing is to say so rather than to show a
+          number computed against labels that do not exist.
+        </p>
+      </div>
     );
   }
   if (!data) {

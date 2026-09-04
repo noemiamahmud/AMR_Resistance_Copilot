@@ -26,6 +26,7 @@ export async function GET(request: Request) {
   try {
     return NextResponse.json(
       await affinityFor(mutation, {
+        targetId: url.searchParams.get("target"),
         live: wantsLive,
         replicates: Number(url.searchParams.get("replicates")) || undefined,
         signal: request.signal,

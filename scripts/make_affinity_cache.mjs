@@ -29,6 +29,7 @@ const THREE_TO_ONE = {
   LEU:"L",LYS:"K",MET:"M",PHE:"F",PRO:"P",SER:"S",THR:"T",TRP:"W",TYR:"Y",VAL:"V",
 };
 
+const targetId = process.env.TARGET_ID ?? "rpob-rifampicin";
 const mutation = (process.argv[2] ?? "S450L").toUpperCase();
 const replicates = Number(process.argv[3] ?? 5);
 const key = process.env.NVIDIA_API_KEY;
@@ -126,7 +127,7 @@ const out = {
       "recycling_steps 3, sampling_steps 50, diffusion_samples 1, sampling_steps_affinity 200, " +
       "diffusion_samples_affinity 5. Wild-type and mutant requests interleaved.",
   },
-  runs: { ...(existing?.runs ?? {}), [mutation]: { wildType, mutant: mut } },
+  runs: { ...(existing?.runs ?? {}), [`${targetId}:${mutation}`]: { wildType, mutant: mut } },
 };
 writeFileSync(CACHE, JSON.stringify(out, null, 2) + "\n");
 

@@ -27,7 +27,7 @@ import path from "path";
 
 import { analyseMutation, loadAssets } from "./analysis";
 import { SCORE_DEFINITION, StructuralScore, ordinal, scoreAnalysis } from "./score";
-import { RPOB_RIFAMPICIN, TargetDefinition } from "./targets";
+import { RPOB_RIFAMPICIN, TARGETS, TargetDefinition } from "./targets";
 
 export type Label = "resistant" | "neutral";
 
@@ -138,7 +138,8 @@ export interface EvaluationResult {
   interpretation: string[];
 }
 
-async function readGoldenSet(target: TargetDefinition): Promise<GoldenSetFile> {
+async function readGoldenSet(target: TargetDefinition): Promise<GoldenSetFile | null> {
+  if (!target.goldenSetFile) return null;
   const raw = await fs.readFile(path.join(process.cwd(), "public", target.goldenSetFile), "utf8");
   return JSON.parse(raw) as GoldenSetFile;
 }
@@ -146,8 +147,8 @@ async function readGoldenSet(target: TargetDefinition): Promise<GoldenSetFile> {
 /** Distances agree to within rounding of the two independent computations. */
 const DISTANCE_TOLERANCE_ANGSTROMS = 0.05;
 
-async function evaluateEntry(entry: GoldenEntry, label: Label): Promise<EvalRow> {
-  const analysis = await analyseMutation(entry.mutation);
+async function evaluateEntry(entry: GoldenEntry, label: Label, targetId: string): Promise<EvalRow> {
+  const analysis = await analyseMutation(entry.mutation, targetId);
   const score = scoreAnalysis(analysis);
   const measured = analysis.structure.drug.minDistanceToDrugAngstroms;
   const stored = entry.distanceToDrugAngstroms ?? null;
@@ -186,15 +187,27 @@ function auroc(resistant: number[], neutral: number[]): number {
   return +(wins / (resistant.length * neutral.length)).toFixed(3);
 }
 
+/** Which targets can be evaluated at all - i.e. which have hand-labelled ground truth. */
+export function targetsWithGoldenSet(): { id: string; gene: string; drug: string }[] {
+  return TARGETS.filter((t) => t.goldenSetFile).map((t) => ({ id: t.id, gene: t.gene, drug: t.drug }));
+}
+
 export async function runEvaluation(
   target: TargetDefinition = RPOB_RIFAMPICIN,
-): Promise<EvaluationResult> {
+): Promise<EvaluationResult | { noGoldenSet: true; target: { gene: string; drug: string }; available: { id: string; gene: string; drug: string }[] }> {
   const golden = await readGoldenSet(target);
+  if (!golden) {
+    return {
+      noGoldenSet: true,
+      target: { gene: target.gene, drug: target.drug },
+      available: targetsWithGoldenSet(),
+    };
+  }
   const assets = await loadAssets(target);
 
   const rows: EvalRow[] = [
-    ...(await Promise.all(golden.resistant.entries.map((e) => evaluateEntry(e, "resistant")))),
-    ...(await Promise.all(golden.neutral.entries.map((e) => evaluateEntry(e, "neutral")))),
+    ...(await Promise.all(golden.resistant.entries.map((e) => evaluateEntry(e, "resistant", target.id)))),
+    ...(await Promise.all(golden.neutral.entries.map((e) => evaluateEntry(e, "neutral", target.id)))),
   ].sort((a, b) => b.score.score - a.score.score);
 
   const resistantScores = rows.filter((r) => r.label === "resistant").map((r) => r.score.score);
@@ -229,7 +242,7 @@ export async function runEvaluation(
   // never been recorded. Blinding is a real edit to the lookup, not a description of one.
   const generalizationRows: GeneralizationRow[] = await Promise.all(
     golden.resistant.entries.map(async (entry) => {
-      const analysis = await analyseMutation(entry.mutation);
+      const analysis = await analyseMutation(entry.mutation, target.id);
       const canonical = analysis.input.canonical;
       const actual = assets.catalogue.entries.find((e) => e.mutation === canonical) ?? null;
       const blindedEntries = assets.catalogue.entries.filter((e) => e.mutation !== canonical);
@@ -268,7 +281,7 @@ export async function runEvaluation(
   const failureRows: KnownFailureRow[] = golden.knownFailure
     ? await Promise.all(
         golden.knownFailure.entries.map(async (entry) => {
-          const score = scoreAnalysis(await analyseMutation(entry.mutation));
+          const score = scoreAnalysis(await analyseMutation(entry.mutation, target.id));
           return {
             mutation: entry.mutation,
             label: entry.label,

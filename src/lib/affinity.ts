@@ -19,12 +19,12 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-import { AnalysisError, loadAssets } from "./analysis";
+import { AnalysisError, loadAssets, unknownTargetMessage } from "./analysis";
 import { THREE_TO_ONE } from "./aminoAcids";
 import { BoltzPrediction, boltzConfigured, predictAffinity } from "./boltz";
 import { parseMutation } from "./mutation";
 import { sequenceOf } from "./pdb";
-import { RPOB_RIFAMPICIN, TargetDefinition, clinicalToUniprot } from "./targets";
+import { TargetDefinition, clinicalToUniprot, resolveTarget } from "./targets";
 
 /** A difference this many standard errors clear of zero is worth calling a difference. */
 export const NOISE_THRESHOLD_SE = 2;
@@ -227,6 +227,7 @@ export async function sequencesFor(
 }
 
 export interface AffinityOptions {
+  targetId?: string | null;
   /** Run the model now instead of serving the cached comparison. */
   live?: boolean;
   /** Replicates per arm when running live. */
@@ -248,9 +249,11 @@ export async function affinityFor(
   options: AffinityOptions = {},
 ): Promise<AffinityResult> {
   const parsed = parseMutation(input);
-  const target = RPOB_RIFAMPICIN;
+  const target = resolveTarget(options.targetId, parsed.gene);
+  if (!target) throw new AnalysisError(unknownTargetMessage(parsed.gene ?? options.targetId));
   const cache = await readCache();
-  const cached = cache?.runs[parsed.canonical] ?? null;
+  // Cache keys are scoped by target: S450L means nothing without knowing which gene.
+  const cached = cache?.runs[`${target.id}:${parsed.canonical}`] ?? null;
 
   const cachedComparison = cache && cached
     ? compare(parsed.canonical, "cached", cache.generatedIso, cache.ligand, cache.method,
@@ -262,7 +265,7 @@ export async function affinityFor(
       comparison: cachedComparison,
       unavailable: cachedComparison
         ? null
-        : `No cached Boltz-2 comparison for ${parsed.canonical}. Only ${Object.keys(cache?.runs ?? {}).join(", ") || "nothing"} is pre-baked; run it live to predict a new one.`,
+        : `No cached Boltz-2 comparison for ${target.gene} ${parsed.canonical}. Pre-baked: ${Object.keys(cache?.runs ?? {}).join(", ") || "none"}. A live run predicts a new one.`,
       fellBackTo: null,
       liveAvailable: boltzConfigured(),
     };
@@ -279,10 +282,11 @@ export async function affinityFor(
 
   const replicates = Math.max(1, Math.min(5, options.replicates ?? 3));
   const { wildType, mutant } = await sequencesFor(target, parsed.clinicalResnum, parsed.mutant);
-  const ligand = cache?.ligand ?? {
-    name: target.drug,
-    smiles: "",
-    source: "RCSB chemical component RFP",
+  // The drug is a property of the target, not of the cache file.
+  const ligand = {
+    name: target.ligandName,
+    smiles: target.ligandSmiles,
+    source: `RCSB chemical component ${target.ligandCode} - the ligand deposited in ${target.complexPdbId}, whose pose the structural pipeline measures against`,
   };
   if (!ligand.smiles) {
     return {

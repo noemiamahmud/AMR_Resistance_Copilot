@@ -11,6 +11,11 @@ export interface ViewerFocus {
   pocketUniprotResnums: number[];
   /** CA coordinate of the mutated residue; 3Dmol anchors labels to a point. */
   center: { x: number; y: number; z: number };
+  /** Which structure and drug pose to draw. Different targets, different files. */
+  structureFile: string;
+  ligandPoseFile: string;
+  ligandCode: string;
+  drug: string;
 }
 
 let scriptPromise: Promise<void> | null = null;
@@ -32,18 +37,22 @@ function load3Dmol(): Promise<void> {
 }
 
 export default function StructureViewer({ focus }: { focus: ViewerFocus | null }) {
+  // Which files are loaded is now part of the focus, so switching target reloads the model.
+  const structureFile = focus?.structureFile ?? null;
+  const ligandPoseFile = focus?.ligandPoseFile ?? null;
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ReturnType<NonNullable<Window["$3Dmol"]>["createViewer"]> | null>(null);
   const [assets, setAssets] = useState<{ pdb: string; ligand: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  // Fetch the structure and the drug pose once.
+  // Fetch the structure and the drug pose for whichever target is selected.
   useEffect(() => {
+    if (!structureFile || !ligandPoseFile) return;
     let cancelled = false;
     Promise.all([
-      fetch("/hero.pdb").then((r) => r.text()),
-      fetch("/data/rifampicin-pose.pdb").then((r) => r.text()),
+      fetch(`/${structureFile}`).then((r) => r.text()),
+      fetch(`/${ligandPoseFile}`).then((r) => r.text()),
     ])
       .then(([pdb, ligand]) => {
         if (!cancelled) setAssets({ pdb, ligand });
@@ -54,7 +63,7 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [structureFile, ligandPoseFile]);
 
   // Create the viewer once the library and the assets are both in.
   useEffect(() => {
@@ -80,6 +89,9 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
       cancelled = true;
       viewerRef.current?.clear();
       viewerRef.current = null;
+      // Switching target swaps the model out; until the new one is built there is nothing
+      // to style, and a stale `ready` would let the focus effect draw into a dead viewer.
+      setReady(false);
     };
   }, [assets]);
 
@@ -94,8 +106,13 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
     // Base: a dim cartoon so the pocket reads as the subject, not the whole 1178-residue chain.
     viewer.setStyle({}, { cartoon: { color: "#1e2a4a", opacity: 0.55 } });
 
-    // Rifampicin, always shown.
-    viewer.setStyle({ resn: "RFP" }, { stick: { colorscheme: "yellowCarbon", radius: 0.22 } });
+    // The drug, always shown.
+    if (focus) {
+      viewer.setStyle(
+        { resn: focus.ligandCode },
+        { stick: { colorscheme: "yellowCarbon", radius: 0.22 } },
+      );
+    }
 
     if (focus) {
       // Pocket residues in teal sticks.
@@ -121,7 +138,7 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
       });
 
       // Frame the drug and its contact shell rather than the whole subunit.
-      viewer.zoomTo({ or: [{ resn: "RFP" }, { resi: [focus.uniprotResnum] }] });
+      viewer.zoomTo({ or: [{ resn: focus.ligandCode }, { resi: [focus.uniprotResnum] }] });
       viewer.zoom(0.6);
     } else {
       viewer.zoomTo();
@@ -141,8 +158,8 @@ export default function StructureViewer({ focus }: { focus: ViewerFocus | null }
       {ready && !error && (
         <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-3 rounded-lg bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
           <Legend color="#ef4444" label="mutated residue" />
-          <Legend color="#2dd4bf" label="rifampicin-contact residues" />
-          <Legend color="#eab308" label="rifampicin" />
+          <Legend color="#2dd4bf" label={`${focus?.drug ?? "drug"}-contact residues`} />
+          <Legend color="#eab308" label={focus?.drug ?? "drug"} />
         </div>
       )}
     </div>

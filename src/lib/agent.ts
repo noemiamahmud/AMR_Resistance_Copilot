@@ -16,8 +16,8 @@ import { ChatMessage, ToolCall, chat } from "./ollama";
 import { MECHANISM_RULES, RESPONSE_SCHEMA, StructuredReasoning, parseStructuredReasoning } from "./reasoning";
 import { MutationParseError, parseMutation } from "./mutation";
 import { Toolbox, makeToolbox } from "./tools";
-import { RPOB_RIFAMPICIN, findTarget } from "./targets";
-import { AnalysisError } from "./analysis";
+import { resolveTarget } from "./targets";
+import { AnalysisError, unknownTargetMessage } from "./analysis";
 
 /** Tool turns before we stop and ask for the answer regardless. */
 const MAX_TOOL_TURNS = 6;
@@ -33,6 +33,7 @@ export interface ToolCallRecord {
 
 export interface AgentRun {
   mutation: string;
+  target: { id: string; gene: string; drug: string };
   model: string;
   /** Tool turns actually taken. */
   turns: number;
@@ -125,15 +126,11 @@ async function runToolTurns(
 
 export async function runAgent(
   input: string,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; targetId?: string | null } = {},
 ): Promise<AgentRun> {
   const parsed = parseMutation(input); // throws MutationParseError
-  const target = (parsed.gene ? findTarget(parsed.gene) : RPOB_RIFAMPICIN) ?? null;
-  if (!target) {
-    throw new AnalysisError(
-      `No structural target is bundled for "${parsed.gene}". This build covers rpoB (M. tuberculosis) with rifampicin.`,
-    );
-  }
+  const target = resolveTarget(options.targetId, parsed.gene);
+  if (!target) throw new AnalysisError(unknownTargetMessage(parsed.gene ?? options.targetId));
 
   const started = Date.now();
   const toolbox = await makeToolbox(target);
@@ -169,6 +166,7 @@ export async function runAgent(
 
   return {
     mutation: parsed.canonical,
+    target: { id: target.id, gene: target.gene, drug: target.drug },
     model: model || final.model,
     turns,
     latencyMs: Date.now() - started,

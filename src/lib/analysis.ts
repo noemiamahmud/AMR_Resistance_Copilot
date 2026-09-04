@@ -10,9 +10,15 @@ import {
   BurialAtResidue, ConfidenceAtResidue, DrugProximity, PocketResidueRef,
   confidenceAt, drugProximity, makeBurialCalculator, neighborsWithin,
 } from "./structure";
-import { RPOB_RIFAMPICIN, TargetDefinition, clinicalToUniprot, findTarget } from "./targets";
+import { TARGETS, TargetDefinition, clinicalToUniprot, resolveTarget } from "./targets";
 
 export class AnalysisError extends Error {}
+
+/** One message, so every entry point explains the same way what this build covers. */
+export function unknownTargetMessage(what: string | null | undefined): string {
+  const list = TARGETS.map((t) => `${t.gene} + ${t.drug}`).join(", ");
+  return `No structural target is bundled for "${what ?? "that"}". This build covers ${list}.`;
+}
 
 interface PocketFile {
   source: { pdbId: string; description: string; contactCutoffAngstroms: number; method: string };
@@ -72,8 +78,9 @@ export interface CatalogueVerdict {
 export interface AnalysisResult {
   input: ParsedMutation;
   target: {
-    gene: string; organism: string; proteinName: string; drug: string;
-    uniprotAccession: string; structureSource: string; ligandSource: string;
+    id: string; gene: string; organism: string; proteinName: string; drug: string;
+    drugClass: string; uniprotAccession: string; structureSource: string;
+    ligandSource: string; structureFile: string; ligandPoseFile: string; blurb: string;
   };
   numbering: {
     clinicalResnum: number;
@@ -110,17 +117,26 @@ export interface AnalysisResult {
   provenance: string[];
 }
 
-let cache: {
+export interface TargetAssets {
   structure: ParsedStructure;
   drugAtoms: Atom[];
   pocket: PocketFile;
   catalogue: CatalogueFile;
   burial: (resSeq: number) => BurialAtResidue;
-} | null = null;
+}
+
+/**
+ * Keyed by target, not global. Parsing a structure and precomputing its burial
+ * distribution is the expensive part of a request, so it is cached - but caching it in one
+ * slot would serve rpoB's coordinates for a gyrA question and every number downstream
+ * would be wrong while still looking entirely plausible.
+ */
+const cache = new Map<string, TargetAssets>();
 
 /** Exposed so the Phase 4 toolbox measures the same structure the pipeline does. */
-export async function loadAssets(target: TargetDefinition) {
-  if (cache) return cache;
+export async function loadAssets(target: TargetDefinition): Promise<TargetAssets> {
+  const hit = cache.get(target.id);
+  if (hit) return hit;
   const dir = path.join(process.cwd(), "public");
   const [pdbText, ligandText, pocketRaw, catalogueRaw] = await Promise.all([
     fs.readFile(path.join(dir, target.structureFile), "utf8"),
@@ -135,14 +151,15 @@ export async function loadAssets(target: TargetDefinition) {
     throw new AnalysisError("the bundled ligand pose contains no atoms");
   }
 
-  cache = {
+  const assets: TargetAssets = {
     structure,
     drugAtoms,
     pocket: JSON.parse(pocketRaw) as PocketFile,
     catalogue: JSON.parse(catalogueRaw) as CatalogueFile,
     burial: makeBurialCalculator(structure),
   };
-  return cache;
+  cache.set(target.id, assets);
+  return assets;
 }
 
 /** How far out to look for catalogued resistance residues around the query residue. */
@@ -223,13 +240,14 @@ function headlineFor(
   return `${mutation.canonical} ${where}, in a ${conf.band}-confidence region (pLDDT ${conf.plddt}), ${burial.band}.`;
 }
 
-export async function analyseMutation(input: string): Promise<AnalysisResult> {
+export async function analyseMutation(
+  input: string,
+  targetId?: string | null,
+): Promise<AnalysisResult> {
   const parsed = parseMutation(input);           // throws MutationParseError
-  const target = (parsed.gene ? findTarget(parsed.gene) : RPOB_RIFAMPICIN) ?? null;
+  const target = resolveTarget(targetId, parsed.gene);
   if (!target) {
-    throw new AnalysisError(
-      `No structural target is bundled for "${parsed.gene}". This build covers rpoB (M. tuberculosis) with rifampicin.`,
-    );
+    throw new AnalysisError(unknownTargetMessage(parsed.gene ?? targetId));
   }
 
   const assets = await loadAssets(target);
@@ -261,9 +279,11 @@ export async function analyseMutation(input: string): Promise<AnalysisResult> {
   return {
     input: parsed,
     target: {
-      gene: target.gene, organism: target.organism, proteinName: target.proteinName,
-      drug: target.drug, uniprotAccession: target.uniprotAccession,
-      structureSource: target.structureSource, ligandSource: target.ligandSource,
+      id: target.id, gene: target.gene, organism: target.organism,
+      proteinName: target.proteinName, drug: target.drug, drugClass: target.drugClass,
+      uniprotAccession: target.uniprotAccession, structureSource: target.structureSource,
+      ligandSource: target.ligandSource, structureFile: target.structureFile,
+      ligandPoseFile: target.ligandPoseFile, blurb: target.blurb,
     },
     numbering: {
       clinicalResnum: parsed.clinicalResnum,

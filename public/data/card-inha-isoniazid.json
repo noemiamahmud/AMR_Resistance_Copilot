@@ -1,0 +1,124 @@
+{
+  "catalogue": "CARD (Comprehensive Antibiotic Resistance Database)",
+  "sourceFile": "snps.txt",
+  "aro": "ARO:3003393",
+  "model": "protein variant model",
+  "target": "inhA",
+  "organism": "Mycobacterium tuberculosis H37Rv",
+  "drug": "isoniazid",
+  "numbering": "clinical / WHO - NP_215999.1; add 0 for UniProt P9WGR1",
+  "note": "Substitution-level entries only. 0 nonsense/unspecified/indel records were skipped because they have no single-residue structural equivalent.",
+  "entryCount": 10,
+  "entries": [
+    {
+      "mutation": "I16T",
+      "wildType": "I",
+      "clinicalResnum": 16,
+      "mutant": "T",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "9728546"
+    },
+    {
+      "mutation": "I21T",
+      "wildType": "I",
+      "clinicalResnum": 21,
+      "mutant": "T",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "35944069"
+    },
+    {
+      "mutation": "I21V",
+      "wildType": "I",
+      "clinicalResnum": 21,
+      "mutant": "V",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "9728546"
+    },
+    {
+      "mutation": "I47T",
+      "wildType": "I",
+      "clinicalResnum": 47,
+      "mutant": "T",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "9728546"
+    },
+    {
+      "mutation": "V78A",
+      "wildType": "V",
+      "clinicalResnum": 78,
+      "mutant": "A",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "9728546"
+    },
+    {
+      "mutation": "S94A",
+      "wildType": "S",
+      "clinicalResnum": 94,
+      "mutant": "A",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "30337678"
+    },
+    {
+      "mutation": "I95P",
+      "wildType": "I",
+      "clinicalResnum": 95,
+      "mutant": "P",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "9728546"
+    },
+    {
+      "mutation": "G141E",
+      "wildType": "G",
+      "clinicalResnum": 141,
+      "mutant": "E",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "30583053"
+    },
+    {
+      "mutation": "T162S",
+      "wildType": "T",
+      "clinicalResnum": 162,
+      "mutant": "S",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "30337678"
+    },
+    {
+      "mutation": "I194T",
+      "wildType": "I",
+      "clinicalResnum": 194,
+      "mutant": "T",
+      "aro": "ARO:3003393",
+      "variantType": "single resistance variant",
+      "partOfCombination": null,
+      "evidence": "Curated-R",
+      "citation": "16495272"
+    }
+  ]
+}
