@@ -2,13 +2,144 @@
 
 A structure-grounded mechanistic interpreter for antimicrobial-resistance mutations.
 
-Resistance catalogues (CARD, the WHO TB catalogue, ResFinder) are lists of mutations
-someone has already seen. They say nothing about a mutation that isn't in them — and
-genomic surveillance turns up novel mutations constantly. This tool reasons from the
-target's 3D structure instead, so it can make a mechanistic call on a mutation no
-database recognises, and explain the reasoning.
+## The problem
 
-**Targets bundled:** three *M. tuberculosis* drug targets, selectable in the UI.
+Antibiotic resistance kills by out-evolving the drugs we use to treat infection. When a
+lab sequences a pathogen and finds a mutation in a drug target gene, the standard next
+step is a catalogue lookup: CARD, the WHO tuberculosis mutation catalogue, ResFinder.
+These catalogues are lists of mutations someone has already seen, phenotyped and
+written up — and they are the right first move, because a catalogue hit carries real
+phenotypic evidence. The problem is what happens when the lookup returns nothing.
+Genomic surveillance turns up mutations no catalogue has recorded constantly, and a
+catalogue has no way to say anything about one of them — not "probably fine," not
+"worth a second look," nothing. The analyst is left guessing while a patient's
+treatment decision waits. This tool is built for that gap: it reasons from the drug
+target's actual 3D structure instead of a list, so it can produce a mechanistic,
+checkable hypothesis for a mutation no database recognizes, and it says explicitly what
+a catalogue-only workflow would have returned for the same input. Where a catalogue
+does have phenotypic evidence, that evidence still wins — the claim here is only ever
+about the mutations a catalogue is silent on.
+
+**Flagship case:** *M. tuberculosis* rpoB S450L — the textbook rifampicin-resistance
+mutation, sitting in RNA polymerase's rifampicin-binding pocket. Three targets ship in
+total (see below), selectable at runtime.
+
+## System design
+
+### How a request actually flows
+
+```mermaid
+flowchart TD
+    U["Analyst types a mutation<br/><i>rpoB S450L</i>"] --> UI["page.tsx (client)"]
+
+    UI -->|"POST /api/analyze"| ANALYZE["analyseMutation()<br/>src/lib/analysis.ts"]
+    ANALYZE --> PARSE["parseMutation()<br/>src/lib/mutation.ts"]
+    ANALYZE --> ASSETS["loadAssets(target)<br/>parses bundled PDB + JSON, cached per target"]
+    ASSETS --> PDB["structure.pdb — AlphaFold model"]
+    ASSETS --> POCKET["pocket-*.json — contact residues"]
+    ASSETS --> CARD["card-*.json — bundled catalogue export"]
+    ANALYZE --> GEOM["src/lib/structure.ts<br/>distance to drug · pLDDT · burial percentile"]
+    GEOM --> RESULT["AnalysisResult:<br/>measurements + catalogue verdict"]
+    RESULT --> UI
+
+    UI -->|"POST /api/reason (pipeline)"| REASON["reason over finished feature payload<br/>src/lib/reasoning.ts"]
+    UI -->|"POST /api/agent (agent mode)"| AGENT["runAgent()<br/>src/lib/agent.ts"]
+    AGENT -->|"tool calls"| TOOLS["Toolbox: distance_to_drug, plddt_at,<br/>burial_at, neighbors_within, catalogue_lookup<br/>src/lib/tools.ts"]
+    TOOLS --> GEOM
+
+    REASON --> OLLAMA["Ollama /api/chat, local<br/>qwen3:8b, JSON-schema constrained"]
+    AGENT --> OLLAMA
+    OLLAMA --> HYPOTHESIS["mechanism · likelihood · caveat · confirmation"]
+    HYPOTHESIS --> UI
+
+    UI -->|"POST /api/triage"| TRIAGE["scoreFrom() over a whole isolate<br/>src/lib/score.ts + src/lib/triage.ts"]
+    UI -->|"GET /api/eval"| EVAL["src/lib/evaluation.ts<br/>golden-set.json separation + generalization"]
+    UI -->|"POST /api/affinity (optional)"| AFFINITY["src/lib/affinity.ts → src/lib/boltz.ts<br/>Boltz-2 NIM, cached or live"]
+    AFFINITY -->|"server-side key"| NVIDIA["NVIDIA build.nvidia.com/mit/boltz2"]
+
+    RESULT --> VIEWER["StructureViewer.tsx<br/>3Dmol.js renders structure + pocket + drug + mutated residue"]
+```
+
+Two things make this diagram worth reading rather than skipping. First, **the pipeline
+and the agent measure the same structure through the same functions** —
+`src/lib/tools.ts` is a thin wrapper over `src/lib/structure.ts`, not a second
+implementation, so the two reasoning paths cannot quietly drift apart. Second, **the
+model never sees the catalogue verdict** in the pipeline path — `AnalysisResult`
+carries it, the UI renders it, but the payload built for Ollama in `reasoning.ts`
+withholds it deliberately, so a hypothesis about a famous mutation can't just be
+recited from training data.
+
+### Full repo layout
+
+```
+AMR_Resistance_Copilot/
+├── README.md                        this file
+├── PLAN.md                          where the project is headed next
+├── package.json                     Next.js 16 / React 19 / Tailwind 4
+│
+├── public/
+│   ├── hero.pdb                     AlphaFold model of rpoB (P9WGY9), the hero structure
+│   └── data/
+│       ├── structures/              gyrA.pdb, inhA.pdb — AlphaFold models, the other two targets
+│       ├── pocket-*.json            drug-contact residues, measured from a real bound complex
+│       ├── *-pose.pdb               the crystallographic ligand, superposed onto the AlphaFold model
+│       ├── card-*.json              bundled CARD catalogue export, one file per target
+│       ├── golden-set.json          hand-labelled eval set (rpoB only)
+│       └── affinity-cache.json      pre-baked Boltz-2 NIM runs for the stretch panel
+│
+├── scripts/                         data generation — see scripts/README.md
+│   ├── targets.json                 single source of truth: one entry per gene+drug target
+│   ├── build_target.py              manifest entry in, verified pocket/pose/catalogue out
+│   ├── make_pocket.py               derives contact residues from a bound complex
+│   ├── make_ligand_pose.py          superposes the crystallographic ligand onto AlphaFold
+│   ├── make_catalogue.py            converts a CARD export into the app's JSON shape
+│   ├── verify_numbering.py          proves the clinical<->structure residue offset
+│   └── make_affinity_cache.mjs      runs real Boltz-2 replicates into affinity-cache.json
+│
+├── src/
+│   ├── app/
+│   │   ├── page.tsx                 the whole UI: three views (single / triage / eval)
+│   │   ├── layout.tsx, globals.css
+│   │   └── api/                     server routes, Node runtime (they read bundled files)
+│   │       ├── analyze/route.ts     -> analyseMutation()  — the structural pipeline
+│   │       ├── reason/route.ts      -> pipeline reasoning over a finished feature payload
+│   │       ├── agent/route.ts       -> runAgent()          — tool-calling reasoning loop
+│   │       ├── triage/route.ts      -> batch isolate ranking
+│   │       ├── eval/route.ts        -> golden-set separation + generalization
+│   │       ├── affinity/route.ts    -> Boltz-2, cached or live
+│   │       ├── targets/route.ts     -> what scripts/targets.json bundles, for the picker
+│   │       └── health/route.ts      -> is Ollama reachable, is the model pulled
+│   │
+│   ├── components/
+│   │   ├── StructureViewer.tsx      3Dmol.js viewer: structure, pocket, drug, mutated residue
+│   │   ├── TriagePanel.tsx          batch isolate table
+│   │   ├── EvalPanel.tsx            separation / generalization / declared-failure panel
+│   │   ├── AffinityPanel.tsx        Boltz-2 wild-type-vs-mutant comparison
+│   │   ├── ScoreUI.tsx              the 0-100 structural score, rendered
+│   │   └── chrome.tsx               shared loading/skeleton chrome
+│   │
+│   └── lib/
+│       ├── mutation.ts              parses free text ("rpoB S450L", "p.Ser450Leu", ...)
+│       ├── targets.ts               reads scripts/targets.json, resolves gene -> target
+│       ├── pdb.ts                   minimal PDB parser (atoms, residues, B-factor/pLDDT)
+│       ├── structure.ts             distance-to-drug, burial percentile, neighbour search
+│       ├── analysis.ts              orchestrates the above into one AnalysisResult
+│       ├── aminoAcids.ts            substitution physicochemistry (hydropathy, class)
+│       ├── score.ts                 the single structural score, shared by triage + eval
+│       ├── ollama.ts                Ollama client: schema-constrained chat, tool calls
+│       ├── reasoning.ts             pipeline prompt + schema for the mechanistic hypothesis
+│       ├── tools.ts                 the agent's toolbox, wrapping structure.ts/analysis.ts
+│       ├── agent.ts                 the tool-calling reasoning loop + trace recording
+│       ├── triage.ts                ranks a pasted isolate by score, novel-before-catalogued
+│       ├── evaluation.ts            separation + generalization over golden-set.json
+│       ├── affinity.ts              wild-type-vs-mutant Boltz-2 comparison + replicate stats
+│       ├── boltz.ts                 the Boltz-2 NIM HTTP client (server-only, holds the key)
+│       └── pool.ts                  small concurrency limiter for batched requests
+│
+└── src/types/3dmol.d.ts             type declarations for the untyped 3Dmol.js CDN build
+```
+
+## Targets bundled
 
 | Gene + drug | Structure | Drug pose from | Numbering offset |
 |---|---|---|---|
@@ -18,18 +149,17 @@ database recognises, and explain the reasoning.
 
 Every one uses a **real drug-bound complex** superposed onto the model, not an inferred
 pocket. For inhA the ligand is the isonicotinic-acyl-NAD adduct, because isoniazid is a
-prodrug and the parent compound never occupies the site.
+prodrug and the parent compound never occupies the site. See
+[Adding a target](#adding-a-target) for how a fourth gets added.
 
-## Status
-
-All phases complete, including the stretch — mutation → structure → mechanism → catalogue
-flag → agent + tool trace → batch triage → eval → predicted affinity.
+## What the app actually does
 
 The app has three views, sharing one structure, one set of measurements and one score.
 
 - Parses `rpoB S450L`, `rpoB p.Ser450Leu` and similar free text.
-- Renders RpoB with the mutated residue, the rifampicin-contact shell, and the drug itself.
-- Measures, from coordinates: closest approach to rifampicin, Cα distance, pLDDT at the
+- Renders the target with the mutated residue, the drug-contact shell, and the drug
+  itself, superposed from a real bound complex.
+- Measures, from coordinates: closest approach to the drug, Cα distance, pLDDT at the
   residue, and burial as a self-calibrating neighbour-count percentile.
 - Hands those measurements to a **local qwen3:8b** and gets back a schema-constrained
   mechanistic hypothesis: mechanism, resistance likelihood, caveat, what would confirm it.
@@ -51,7 +181,12 @@ machine — no network call at request time, and no API key. The Boltz-2 compari
 single exception: it is optional, server-side, and served from a pre-baked cache unless you
 explicitly ask for a live run.
 
-## Run it
+## Run it locally
+
+**Stack:** Next.js 16 · React 19 · Tailwind 4 · [3Dmol.js](https://3dmol.org) (CDN) ·
+[Ollama](https://ollama.com) running `qwen3:8b` locally, for the mechanistic reasoning ·
+[Boltz-2](https://build.nvidia.com/mit/boltz2) via NVIDIA NIM (optional, stretch), for
+predicted affinity.
 
 ```bash
 ollama serve                 # separate terminal
@@ -217,6 +352,9 @@ parameters. And the **catalogue is not an input**: `scoreFrom()` takes a distanc
 percentile and a pLDDT, and there is no catalogue argument to pass one through. That is
 what makes the generalization result mean anything.
 
+*(The skeptical read on how far this heuristic actually generalizes — and what it would
+take to know — is in [PLAN.md](PLAN.md).)*
+
 ## Surveillance batch triage
 
 A sequenced isolate is not one mutation, it is a list, and the analyst's question is which
@@ -308,6 +446,9 @@ scored: it may call `catalogue_lookup`, so on a catalogued mutation it can read 
 and a method that can see the labels cannot be evaluated against them. The pipeline never
 sees the catalogue, which is exactly what makes it scorable.
 
+*(How much weight this eval can actually carry — golden-set size, proxy negatives, what a
+real benchmark would need — is addressed head-on in [PLAN.md](PLAN.md).)*
+
 ## The stretch: a predicted affinity, and a negative result
 
 The plan's stretch was to quantify the resistance instead of inferring it: send the
@@ -358,7 +499,8 @@ that this configuration cannot see it, and there are three concrete reasons why:
 
 Note that the pocket cannot be trimmed to make this cheaper: the rifampicin-contact
 residues run from clinical 167 to 674, so no contiguous fragment contains the binding site.
-It is the whole chain or nothing.
+It is the whole chain or nothing. *(What it would take to actually fix this — a holoenzyme
+assembly, an MSA-based fold, or a different tool entirely — is in [PLAN.md](PLAN.md).)*
 
 ### The demo fence
 
@@ -424,21 +566,26 @@ displays both, and validates the wild-type amino acid you typed against the sequ
 `scripts/verify_numbering.py` proves the +6 alignment holds with zero mismatches
 across all 1171 shared residues.
 
-## Data provenance
+## Data provenance and external resources
 
 | Asset | Source |
 |---|---|
-| `public/hero.pdb` | AlphaFold DB `AF-P9WGY9-F1-model_v6.pdb` (note: **v6**; the widely-cited v4 URL is dead) |
-| `public/data/rifampicin-pose.pdb` | PDB 5UHC ligand RFP, superposed onto the AlphaFold model |
+| `public/hero.pdb` | [AlphaFold DB](https://alphafold.ebi.ac.uk) `AF-P9WGY9-F1-model_v6.pdb` (note: **v6**; the widely-cited v4 URL is dead) |
+| `public/data/rifampicin-pose.pdb` | [PDB 5UHC](https://www.rcsb.org/structure/5UHC) ligand RFP, superposed onto the AlphaFold model |
 | `public/data/pocket-rpob-rifampicin.json` | rpoB residues within 5 Å of rifampicin in 5UHC |
-| `public/data/card-rpob-rifampicin.json` | CARD `snps.txt`, ARO:3003283 — 157 substitutions |
+| `public/data/card-rpob-rifampicin.json` | [CARD](https://card.mcmaster.ca) `snps.txt`, ARO:3003283 — 157 substitutions |
 | `public/data/golden-set.json` | Hand-labelled eval set: 5 CARD/WHO resistant, 5 proxy-neutral, 1 declared failure |
-| `public/data/affinity-cache.json` | 5+5 real Boltz-2 NIM runs, wild type vs S450L (nothing synthetic) |
+| `public/data/affinity-cache.json` | 5+5 real [Boltz-2 NIM](https://build.nvidia.com/mit/boltz2) runs, wild type vs S450L (nothing synthetic) |
 | `public/data/structures/gyra.pdb` | AlphaFold DB `AF-P9WG47-F1-model_v6.pdb` |
 | `public/data/structures/inha.pdb` | AlphaFold DB `AF-P9WGR1-F1-model_v6.pdb` |
-| `public/data/moxifloxacin-pose.pdb` | PDB 5BS8 ligand MFX, superposed onto the AlphaFold model |
-| `public/data/isoniazid-nad-pose.pdb` | PDB 1ZID ligand ZID, superposed onto the AlphaFold model |
+| `public/data/moxifloxacin-pose.pdb` | [PDB 5BS8](https://www.rcsb.org/structure/5BS8) ligand MFX, superposed onto the AlphaFold model |
+| `public/data/isoniazid-nad-pose.pdb` | [PDB 1ZID](https://www.rcsb.org/structure/1ZID) ligand ZID, superposed onto the AlphaFold model |
 | `public/data/card-gyra-*.json`, `card-inha-*.json` | CARD `snps.txt`, ARO:3003295 and ARO:3003393 |
+
+Other resources referenced throughout: [UniProt](https://www.uniprot.org) for accessions,
+[PubChem](https://pubchem.ncbi.nlm.nih.gov) for drug SMILES, and the
+[WHO catalogue of mutations associated with drug resistance in *M. tuberculosis*](https://www.who.int/publications/i/item/9789240082410)
+for the clinical numbering reference and evidence grades cited in the golden set.
 
 See [scripts/README.md](scripts/README.md) to regenerate any of these from primary sources.
 
@@ -478,6 +625,10 @@ See [scripts/README.md](scripts/README.md) to regenerate any of these from prima
   per row one at a time at roughly 13 s each, so the eight-mutation demo isolate takes a
   little under two minutes to finish filling in. The ranking itself is instant and needs no
   model.
+
+For a harder look at which of these caveats are actually load-bearing weaknesses — and
+what would need to change to call this scientifically novel rather than a well-built
+demo — see [PLAN.md](PLAN.md).
 
 ## Deploying this publicly
 
@@ -543,7 +694,8 @@ secret is `NVIDIA_API_KEY`, which is read server-side in `src/lib/boltz.ts`, sen
 NVIDIA, and never reaches the browser. The main risk of a public deployment is cost, not
 disclosure — see rate limiting above.
 
-## Stack
+## Where this goes next
 
-Next.js 16 · React 19 · Tailwind 4 · 3Dmol.js · Ollama (`qwen3:8b`, local) for the
-mechanistic reasoning · Boltz-2 via NVIDIA NIM (optional, stretch) for predicted affinity.
+Everything above is complete and working end to end. [PLAN.md](PLAN.md) is the honest,
+critical look at where this architecture is weak — scientifically and at scale — and the
+phased plan for what comes after.
